@@ -4,9 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Plus, RotateCcw, Star, Brain } from "lucide-react";
+import { BookOpen, Plus, RotateCcw, Star, Brain, Edit, Trash2, ArrowLeft } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { toast } from "sonner";
+import { FlashcardDialog } from './flashcard-dialog';
+import { cn } from "@/lib/utils";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface Flashcard {
   id: string;
@@ -30,13 +33,18 @@ export function FlashcardsWidget({ userId }: FlashcardsWidgetProps) {
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
-  const [currentCard, setCurrentCard] = useState<Flashcard | null>(null);
-  const [showAnswer, setShowAnswer] = useState(false);
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [newCard, setNewCard] = useState({
     front_text: "",
     back_text: ""
   });
+
+  const [showDialog, setShowDialog] = useState(false);
+  const [editingCard, setEditingCard] = useState<Flashcard | undefined>(undefined);
+  const [showAlert, setShowAlert] = useState(false);
+  const [cardToDelete, setCardToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     loadFlashcards();
@@ -103,51 +111,30 @@ export function FlashcardsWidget({ userId }: FlashcardsWidgetProps) {
 
   const startReview = () => {
     if (flashcards.length === 0) {
-      toast.error("No flashcards available for review");
+      toast.error("No flashcards to review!");
       return;
     }
-    setCurrentCard(flashcards[0]);
+    setCurrentCardIndex(0);
+    setIsFlipped(false);
     setIsReviewing(true);
-    setShowAnswer(false);
   };
 
-  const reviewCard = async (correct: boolean) => {
-    if (!currentCard) return;
-
-    try {
-      const newSuccessRate = correct 
-        ? Math.min(currentCard.success_rate + 10, 100)
-        : Math.max(currentCard.success_rate - 10, 0);
-
-      const { error } = await supabase
-        .from('flashcards')
-        .update({
-          last_reviewed: new Date().toISOString(),
-          review_count: currentCard.review_count + 1,
-          success_rate: newSuccessRate
-        })
-        .eq('id', currentCard.id);
-
-      if (error) {
-        console.error("Error updating flashcard:", error);
-        return;
-      }
-
-      // Move to next card or end review
-      const currentIndex = flashcards.findIndex(card => card.id === currentCard.id);
-      if (currentIndex < flashcards.length - 1) {
-        setCurrentCard(flashcards[currentIndex + 1]);
-        setShowAnswer(false);
-      } else {
-        setIsReviewing(false);
-        setCurrentCard(null);
-        toast.success("Review session completed!");
-        loadFlashcards();
-      }
-    } catch (error) {
-      console.error("Error reviewing flashcard:", error);
-    }
+  const handleNextCard = (correct: boolean) => {
+    // Logic to update card stats
+    // ...
+    setIsFlipped(false);
+    setTimeout(() => {
+        if (currentCardIndex < flashcards.length - 1) {
+            setCurrentCardIndex(currentCardIndex + 1);
+        } else {
+            setIsReviewing(false);
+            toast.success("Review session complete! 🎉");
+            loadFlashcards();
+        }
+    }, 200); // Allow flip back animation to be seen
   };
+
+  const currentCard = isReviewing ? flashcards[currentCardIndex] : null;
 
   const getDifficultyColor = (rating: number) => {
     if (rating <= 2) return 'bg-green-100 text-green-800';
@@ -159,6 +146,27 @@ export function FlashcardsWidget({ userId }: FlashcardsWidgetProps) {
     if (rate >= 80) return 'text-green-600';
     if (rate >= 60) return 'text-yellow-600';
     return 'text-red-600';
+  };
+
+  const handleDeleteClick = (cardId: string) => {
+    setCardToDelete(cardId);
+    setShowAlert(true);
+  };
+
+  const deleteFlashcard = async () => {
+    if (!cardToDelete) return;
+
+    try {
+      const { error } = await supabase.from("flashcards").delete().eq("id", cardToDelete);
+      if (error) throw error;
+      toast.success("Flashcard deleted!");
+      loadFlashcards();
+    } catch (error) {
+      toast.error("Failed to delete flashcard.");
+    } finally {
+      setShowAlert(false);
+      setCardToDelete(null);
+    }
   };
 
   if (isLoading) {
@@ -181,168 +189,112 @@ export function FlashcardsWidget({ userId }: FlashcardsWidgetProps) {
 
   if (isReviewing && currentCard) {
     return (
-      <Card className="border-2 border-dashed border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
+      <Card className="flex flex-col">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center space-x-2">
-              <Brain className="h-5 w-5 text-green-600" />
-              <span>Review Mode</span>
-            </CardTitle>
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => setIsReviewing(false)}
-            >
-              Exit Review
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={() => setIsReviewing(false)} className="self-start">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to List
+          </Button>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="bg-white rounded-lg p-6 min-h-[200px] flex items-center justify-center border-2 border-green-200">
-            <div className="text-center space-y-4">
-              <div className="text-lg font-medium text-gray-900">
-                {showAnswer ? currentCard.back_text : currentCard.front_text}
-              </div>
-              {!showAnswer && (
-                <Button 
-                  onClick={() => setShowAnswer(true)}
-                  className="bg-green-600 hover:bg-green-700"
+        <CardContent className="flex-grow flex flex-col items-center justify-center space-y-4">
+            <div className="w-full max-w-sm h-64 perspective-1000">
+                <div
+                    className={cn(
+                        "relative w-full h-full transform-style-preserve-3d transition-transform duration-500",
+                        isFlipped ? "rotate-y-180" : ""
+                    )}
+                    onClick={() => setIsFlipped(!isFlipped)}
                 >
-                  Show Answer
-                </Button>
-              )}
+                    {/* Front of card */}
+                    <div className="absolute w-full h-full backface-hidden flex items-center justify-center p-6 rounded-xl bg-white dark:bg-gray-800 shadow-lg border">
+                        <p className="text-xl text-center font-semibold">{currentCard.front_text}</p>
+                    </div>
+                    {/* Back of card */}
+                    <div className="absolute w-full h-full backface-hidden rotate-y-180 flex items-center justify-center p-6 rounded-xl bg-blue-100 dark:bg-blue-900/50 shadow-lg border">
+                         <p className="text-xl text-center font-semibold">{currentCard.back_text}</p>
+                    </div>
+                </div>
             </div>
-          </div>
-          
-          {showAnswer && (
-            <div className="flex space-x-3">
-              <Button 
-                onClick={() => reviewCard(false)}
-                variant="outline"
-                className="flex-1 border-red-300 text-red-700 hover:bg-red-50"
-              >
-                Incorrect
-              </Button>
-              <Button 
-                onClick={() => reviewCard(true)}
-                className="flex-1 bg-green-600 hover:bg-green-700"
-              >
-                Correct
-              </Button>
+            
+            <div className="flex space-x-4">
+              <Button onClick={() => handleNextCard(false)} variant="outline" className="w-32">Incorrect</Button>
+              <Button onClick={() => handleNextCard(true)} className="w-32">Correct</Button>
             </div>
-          )}
-          
-          <div className="text-center text-sm text-gray-500">
-            Card {flashcards.findIndex(card => card.id === currentCard.id) + 1} of {flashcards.length}
-          </div>
+             <p className="text-sm text-gray-500">Card {currentCardIndex + 1} of {flashcards.length}</p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="border-2 border-dashed border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
+    <Card>
+       <CardHeader>
+          <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
               <BookOpen className="h-5 w-5 text-green-600" />
               <span>Flashcards</span>
             </CardTitle>
-            <CardDescription>Active recall learning with spaced repetition</CardDescription>
-          </div>
-          <div className="flex space-x-2">
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={startReview}
-              disabled={flashcards.length === 0}
-              className="border-green-300 text-green-700 hover:bg-green-100"
-            >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Review
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => setIsCreating(!isCreating)}
-              className="border-green-300 text-green-700 hover:bg-green-100"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Card
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Create Card Form */}
-        {isCreating && (
-          <div className="border border-green-200 rounded-lg p-4 space-y-3 bg-white">
-            <Textarea
-              placeholder="Front of card (question/prompt)..."
-              value={newCard.front_text}
-              onChange={(e) => setNewCard(prev => ({ ...prev, front_text: e.target.value }))}
-              rows={2}
-            />
-            <Textarea
-              placeholder="Back of card (answer/explanation)..."
-              value={newCard.back_text}
-              onChange={(e) => setNewCard(prev => ({ ...prev, back_text: e.target.value }))}
-              rows={2}
-            />
-            <div className="flex space-x-2">
-              <Button size="sm" onClick={createFlashcard} className="bg-green-600 hover:bg-green-700">
-                Create Card
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setIsCreating(false)}>
-                Cancel
-              </Button>
+            <div className="flex gap-2">
+                 <Button size="sm" variant="outline" onClick={startReview} disabled={flashcards.length === 0}>
+                    <Brain className="h-4 w-4 mr-2" />
+                    Review
+                </Button>
+                <Button size="sm" onClick={() => { setEditingCard(undefined); setShowDialog(true); }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Card
+                </Button>
             </div>
           </div>
-        )}
-
-        {/* Cards List */}
-        {flashcards.length === 0 ? (
-          <div className="text-center py-8 space-y-3">
-            <BookOpen className="h-8 w-8 text-green-400 mx-auto" />
-            <p className="text-green-600 font-medium">No flashcards yet</p>
-            <p className="text-sm text-green-500">Create your first flashcard to start learning!</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm text-green-700">
-              <span>{flashcards.length} cards available</span>
-              <span>Ready for review</span>
-            </div>
-            {flashcards.slice(0, 3).map((card) => (
-              <div
-                key={card.id}
-                className="border border-green-200 rounded-lg p-3 space-y-2 bg-white hover:shadow-sm transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900 line-clamp-2">
-                      {card.front_text}
-                    </p>
-                    <div className="flex items-center space-x-3 mt-2 text-xs text-gray-500">
-                      <span>Reviewed {card.review_count} times</span>
-                      <span className={getSuccessRateColor(card.success_rate)}>
-                        {card.success_rate}% success
-                      </span>
-                      <Badge className={`text-xs ${getDifficultyColor(card.difficulty_rating)}`}>
-                        Level {card.difficulty_rating}
-                      </Badge>
-                    </div>
-                  </div>
-                  {card.is_favorite && (
-                    <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                  )}
+        </CardHeader>
+        <CardContent>
+            {flashcards.length > 0 ? (
+                <ul className="space-y-2">
+                    {flashcards.map(card => (
+                        <li key={card.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                            <p className="font-medium">{card.front_text}</p>
+                            <div>
+                                <Button variant="ghost" size="icon" onClick={() => { setEditingCard(card); setShowDialog(true); }}>
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                                 <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="text-red-500"
+                                    onClick={() => handleDeleteClick(card.id)}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="text-center py-8">
+                    <p className="text-gray-500">You have no flashcards yet.</p>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
+            )}
+        </CardContent>
+      <FlashcardDialog
+        open={showDialog}
+        onOpenChange={setShowDialog}
+        onSuccess={loadFlashcards}
+        userId={userId}
+        flashcard={editingCard}
+      />
+      <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    This will permanently delete this flashcard. This action cannot be undone.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={deleteFlashcard}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

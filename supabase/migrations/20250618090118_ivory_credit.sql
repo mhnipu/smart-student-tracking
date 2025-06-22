@@ -179,46 +179,59 @@ ALTER TABLE resource_library ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_resources ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+DROP POLICY IF EXISTS "Users can manage own study plans" ON study_plans;
 CREATE POLICY "Users can manage own study plans"
   ON study_plans FOR ALL
   TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can manage own flashcards" ON flashcards;
 CREATE POLICY "Users can manage own flashcards"
   ON flashcards FOR ALL
   TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can read own progress snapshots"
+DROP POLICY IF EXISTS "Users can view own progress snapshots" ON progress_snapshots;
+CREATE POLICY "Users can view own progress snapshots"
   ON progress_snapshots FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can read own AI insights"
+DROP POLICY IF EXISTS "Users can manage own AI insights" ON ai_insights;
+CREATE POLICY "Users can manage own AI insights"
   ON ai_insights FOR ALL
   TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can read public groups and manage own groups"
-  ON collaboration_groups FOR SELECT
-  TO authenticated
-  USING (privacy_level = 'public' OR created_by = auth.uid());
-
-CREATE POLICY "Users can manage own group memberships"
+DROP POLICY IF EXISTS "Users can manage group memberships" ON group_memberships;
+CREATE POLICY "Users can manage group memberships"
   ON group_memberships FOR ALL
   TO authenticated
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+  USING (auth.uid() = user_id);
 
-CREATE POLICY "Anyone can read verified resources"
+DROP POLICY IF EXISTS "Group members can manage collaboration groups" ON collaboration_groups;
+CREATE POLICY "Group members can manage collaboration groups"
+  ON collaboration_groups FOR ALL
+  TO authenticated
+  USING (
+    id IN (
+      SELECT group_id
+      FROM group_memberships
+      WHERE user_id = auth.uid() AND role IN ('admin', 'moderator')
+    )
+  );
+
+DROP POLICY IF EXISTS "Anyone can view resource library" ON resource_library;
+CREATE POLICY "Anyone can view resource library"
   ON resource_library FOR SELECT
   TO authenticated
-  USING (is_verified = true);
+  USING (true);
 
-CREATE POLICY "Users can manage own resource interactions"
+DROP POLICY IF EXISTS "Users can manage own resources" ON user_resources;
+CREATE POLICY "Users can manage own resources"
   ON user_resources FOR ALL
   TO authenticated
   USING (auth.uid() = user_id)
@@ -259,10 +272,15 @@ CREATE INDEX IF NOT EXISTS idx_resource_library_tags ON resource_library USING G
 CREATE INDEX IF NOT EXISTS idx_user_resources_user_id ON user_resources(user_id);
 
 -- Add triggers for new tables
+DROP TRIGGER IF EXISTS update_study_plans_updated_at ON study_plans;
 CREATE TRIGGER update_study_plans_updated_at BEFORE UPDATE ON study_plans FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_flashcards_updated_at ON flashcards;
 CREATE TRIGGER update_flashcards_updated_at BEFORE UPDATE ON flashcards FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_collaboration_groups_updated_at BEFORE UPDATE ON collaboration_groups FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_ai_insights_updated_at ON ai_insights;
+CREATE TRIGGER update_ai_insights_updated_at BEFORE UPDATE ON ai_insights FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_resource_library_updated_at ON resource_library;
 CREATE TRIGGER update_resource_library_updated_at BEFORE UPDATE ON resource_library FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_user_resources_updated_at ON user_resources;
 CREATE TRIGGER update_user_resources_updated_at BEFORE UPDATE ON user_resources FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to generate AI insights
@@ -323,7 +341,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger to generate insights on new marks
+DROP TRIGGER IF EXISTS generate_insights_on_mark ON marks;
 CREATE TRIGGER generate_insights_on_mark
   AFTER INSERT ON marks
   FOR EACH ROW EXECUTE FUNCTION generate_ai_insights();

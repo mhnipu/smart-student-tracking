@@ -144,6 +144,7 @@ ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reminders ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for Goals
+DROP POLICY IF EXISTS "Users can manage own goals" ON goals;
 CREATE POLICY "Users can manage own goals"
   ON goals FOR ALL
   TO authenticated
@@ -151,12 +152,14 @@ CREATE POLICY "Users can manage own goals"
   WITH CHECK (auth.uid() = user_id);
 
 -- RLS Policies for Achievements (read-only for users)
+DROP POLICY IF EXISTS "Anyone can read achievements" ON achievements;
 CREATE POLICY "Anyone can read achievements"
   ON achievements FOR SELECT
   TO authenticated
   USING (true);
 
 -- RLS Policies for User Achievements
+DROP POLICY IF EXISTS "Users can manage own achievements" ON user_achievements;
 CREATE POLICY "Users can manage own achievements"
   ON user_achievements FOR ALL
   TO authenticated
@@ -164,6 +167,7 @@ CREATE POLICY "Users can manage own achievements"
   WITH CHECK (auth.uid() = user_id);
 
 -- RLS Policies for Study Sessions
+DROP POLICY IF EXISTS "Users can manage own study sessions" ON study_sessions;
 CREATE POLICY "Users can manage own study sessions"
   ON study_sessions FOR ALL
   TO authenticated
@@ -171,6 +175,7 @@ CREATE POLICY "Users can manage own study sessions"
   WITH CHECK (auth.uid() = user_id);
 
 -- RLS Policies for Notes
+DROP POLICY IF EXISTS "Users can manage own notes" ON notes;
 CREATE POLICY "Users can manage own notes"
   ON notes FOR ALL
   TO authenticated
@@ -178,6 +183,7 @@ CREATE POLICY "Users can manage own notes"
   WITH CHECK (auth.uid() = user_id);
 
 -- RLS Policies for Reminders
+DROP POLICY IF EXISTS "Users can manage own reminders" ON reminders;
 CREATE POLICY "Users can manage own reminders"
   ON reminders FOR ALL
   TO authenticated
@@ -204,6 +210,7 @@ CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
 CREATE INDEX IF NOT EXISTS idx_goals_target_date ON goals(target_date);
 CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id ON user_achievements(user_id);
 CREATE INDEX IF NOT EXISTS idx_study_sessions_user_id ON study_sessions(user_id);
+ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS start_time timestamptz NOT NULL DEFAULT now();
 CREATE INDEX IF NOT EXISTS idx_study_sessions_start_time ON study_sessions(start_time);
 CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
 CREATE INDEX IF NOT EXISTS idx_notes_tags ON notes USING GIN(tags);
@@ -211,9 +218,13 @@ CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON reminders(user_id);
 CREATE INDEX IF NOT EXISTS idx_reminders_date ON reminders(reminder_date);
 
 -- Add updated_at triggers for new tables
+DROP TRIGGER IF EXISTS update_goals_updated_at ON goals;
 CREATE TRIGGER update_goals_updated_at BEFORE UPDATE ON goals FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_study_sessions_updated_at ON study_sessions;
 CREATE TRIGGER update_study_sessions_updated_at BEFORE UPDATE ON study_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_notes_updated_at ON notes;
 CREATE TRIGGER update_notes_updated_at BEFORE UPDATE ON notes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_reminders_updated_at ON reminders;
 CREATE TRIGGER update_reminders_updated_at BEFORE UPDATE ON reminders FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to calculate and update user streaks
@@ -259,7 +270,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger to update streaks when study sessions are added
+DROP TRIGGER IF EXISTS update_streak_on_study_session ON study_sessions;
 CREATE TRIGGER update_streak_on_study_session
   AFTER INSERT ON study_sessions
   FOR EACH ROW EXECUTE FUNCTION update_user_streak();
@@ -314,11 +325,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Triggers to check achievements
+DROP TRIGGER IF EXISTS check_achievements_on_mark ON marks;
 CREATE TRIGGER check_achievements_on_mark
   AFTER INSERT ON marks
   FOR EACH ROW EXECUTE FUNCTION check_achievements();
 
+DROP TRIGGER IF EXISTS check_achievements_on_study_session ON study_sessions;
 CREATE TRIGGER check_achievements_on_study_session
   AFTER INSERT OR UPDATE ON study_sessions
   FOR EACH ROW EXECUTE FUNCTION check_achievements();

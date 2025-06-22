@@ -49,6 +49,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { DbErrorState } from "@/components/dashboard/db-error-state";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 interface Analytics {
   totalMarks: number;
@@ -868,6 +869,7 @@ export default function DashboardPage() {
             </div>
             
             <div className="flex items-center space-x-4">
+              <ThemeToggle />
               <Button 
                 onClick={() => setShowAddMark(true)} 
                 className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg"

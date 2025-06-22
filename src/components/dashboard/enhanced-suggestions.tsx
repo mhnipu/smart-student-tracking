@@ -63,6 +63,8 @@ export function EnhancedSuggestions({ userId, onAction }: EnhancedSuggestionsPro
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isAnyExpanded, setIsAnyExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [actionPlans, setActionPlans] = useState<Record<string, string[]>>({});
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState<string | null>(null);
 
   useEffect(() => {
     loadSuggestions();
@@ -259,6 +261,27 @@ export function EnhancedSuggestions({ userId, onAction }: EnhancedSuggestionsPro
     if (filter === 'high_priority') return suggestion.priority === 'high';
     return suggestion.type === filter;
   });
+
+  const generateActionPlan = async (suggestion: EnhancedSuggestion) => {
+    setIsGeneratingPlan(suggestion.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-action-plan', {
+        body: {
+          title: suggestion.title,
+          description: suggestion.description,
+        },
+      });
+
+      if (error) throw error;
+
+      setActionPlans(prev => ({ ...prev, [suggestion.id]: data.plan }));
+      toast.success("Action plan created!");
+    } catch (error) {
+      toast.error("Failed to generate action plan.");
+    } finally {
+      setIsGeneratingPlan(null);
+    }
+  };
 
   // Loading state
   if (isLoading) {
@@ -460,49 +483,58 @@ export function EnhancedSuggestions({ userId, onAction }: EnhancedSuggestionsPro
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="mt-4 pt-4 border-t"
+                          className="overflow-hidden"
                         >
-                          <p className="text-sm text-gray-700 mb-4">{suggestion.description}</p>
-                          
-                          {suggestion.resource_url && (
-                            <div className="mb-4">
-                              <a 
-                                href={suggestion.resource_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center text-sm bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors"
+                          <div className="pt-3 pb-4 px-4 border-t">
+                            <p className="text-sm text-gray-600 mb-4">{suggestion.description}</p>
+                            
+                            {actionPlans[suggestion.id] ? (
+                              <div className="space-y-2">
+                                <h4 className="font-semibold text-sm">Your Action Plan:</h4>
+                                <ul className="list-decimal list-inside space-y-1 text-sm">
+                                  {actionPlans[suggestion.id].map((step, i) => <li key={i}>{step}</li>)}
+                                </ul>
+                              </div>
+                            ) : (
+                               <Button
+                                  onClick={() => generateActionPlan(suggestion)}
+                                  disabled={isGeneratingPlan === suggestion.id}
+                                  size="sm"
+                                >
+                                  {isGeneratingPlan === suggestion.id ? (
+                                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Sparkles className="h-4 w-4 mr-2" />
+                                  )}
+                                  Create Action Plan
+                                </Button>
+                            )}
+                            
+                            <div className="mt-4 flex justify-between items-center">
+                              <Button 
+                                size="sm" 
+                                className="bg-green-600 hover:bg-green-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAction(suggestion.id, 'completed');
+                                }}
                               >
-                                <ExternalLink className="h-3 w-3 mr-1.5" />
-                                View Resource
-                              </a>
+                                <CheckCircle className="h-4 w-4 mr-1.5" />
+                                Mark as Done
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="text-gray-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAction(suggestion.id, 'dismissed');
+                                }}
+                              >
+                                <X className="h-4 w-4 mr-1.5" />
+                                Dismiss
+                              </Button>
                             </div>
-                          )}
-                          
-                          <div className="flex space-x-2 mt-4">
-                            <Button 
-                              size="sm" 
-                              className="bg-green-600 hover:bg-green-700"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAction(suggestion.id, 'completed');
-                              }}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1.5" />
-                              Mark as Done
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              className="text-gray-700"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAction(suggestion.id, 'dismissed');
-                              }}
-                            >
-                              <X className="h-4 w-4 mr-1.5" />
-                              Dismiss
-                            </Button>
                           </div>
                         </motion.div>
                       )}

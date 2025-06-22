@@ -364,6 +364,14 @@ CREATE TABLE IF NOT EXISTS group_memberships (
   UNIQUE(user_id, group_id)
 );
 
+-- Make user_id on subjects nullable to allow for global subjects
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'subjects' AND column_name = 'user_id') THEN
+    ALTER TABLE subjects ALTER COLUMN user_id DROP NOT NULL;
+  END IF;
+END $$;
+
 -- Enable RLS on all tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
