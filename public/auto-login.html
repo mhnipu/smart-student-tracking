@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Login</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background: linear-gradient(to bottom right, #f0f4ff, #ffffff, #f0faff);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    .container {
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      padding: 30px;
+      max-width: 500px;
+      width: 100%;
+    }
+    h1 {
+      color: #1e40af;
+      margin-bottom: 20px;
+    }
+    .status {
+      margin: 20px 0;
+    }
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      border-left-color: #3b82f6;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .button {
+      background-color: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    .button:hover {
+      background-color: #2563eb;
+    }
+    .error {
+      color: #dc2626;
+      margin-top: 20px;
+    }
+    .steps {
+      text-align: left;
+      margin-top: 20px;
+    }
+    .steps li {
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Auto Login</h1>
+    <div id="status" class="status">Initializing login process...</div>
+    <div class="spinner" id="spinner"></div>
+    <div id="error" class="error" style="display: none;"></div>
+    <button id="retryButton" class="button" style="display: none;">Retry Login</button>
+    <div id="steps" class="steps" style="display: none;">
+      <h3>If you're experiencing issues:</h3>
+      <ol>
+        <li>Check your Supabase configuration in the .env file</li>
+        <li>Make sure the database migrations have been run</li>
+        <li>Try clearing your browser cache and cookies</li>
+        <li>Return to the <a href="/">homepage</a> and try again</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const statusEl = document.getElementById('status');
+      const errorEl = document.getElementById('error');
+      const spinnerEl = document.getElementById('spinner');
+      const retryButton = document.getElementById('retryButton');
+      const stepsEl = document.getElementById('steps');
+      
+      async function attemptLogin() {
+        try {
+          statusEl.textContent = 'Creating Supabase client...';
+          
+          // Create Supabase client with the correct URL and key
+          const { createClient } = supabase;
+          const supabaseClient = createClient(
+            'https://ptvsztehdxfiesebjk.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZi'
+          );
+          
+          statusEl.textContent = 'Attempting to sign in...';
+          
+          // Try to sign in with demo account
+          const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email: 'demo@example.com',
+            password: 'password123',
+          });
+
+          if (error) {
+            statusEl.textContent = 'Login failed, trying to create account...';
+            
+            // If login fails, create the account
+            const { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({
+              email: 'demo@example.com',
+              password: 'password123',
+              options: {
+                data: {
+                  name: 'Demo User',
+                },
+              },
+            });
+
+            if (signUpError) {
+              throw new Error(`Could not create demo account: ${signUpError.message}`);
+            }
+            
+            statusEl.textContent = 'Account created, trying to login again...';
+            
+            // Try login again after signup
+            const { data: retryData, error: retryError } = await supabaseClient.auth.signInWithPassword({
+              email: 'demo@example.com',
+              password: 'password123',
+            });
+
+            if (retryError) {
+              throw new Error(`Demo login failed after account creation: ${retryError.message}`);
+            }
+            
+            statusEl.textContent = 'Login successful! Redirecting to dashboard...';
+            
+            // Redirect to dashboard
+            window.location.href = '/dashboard';
+          } else {
+            // Login successful
+            statusEl.textContent = 'Login successful! Redirecting to dashboard...';
+            
+            // Redirect to dashboard
+            window.location.href = '/dashboard';
+          }
+        } catch (err) {
+          console.error('Login error:', err);
+          statusEl.textContent = 'Login failed.';
+          errorEl.textContent = err.message || 'An unknown error occurred';
+          errorEl.style.display = 'block';
+          spinnerEl.style.display = 'none';
+          retryButton.style.display = 'block';
+          stepsEl.style.display = 'block';
+        }
+      }
+
+      // Start login process
+      attemptLogin();
+
+      // Set up retry button
+      retryButton.addEventListener('click', function() {
+        errorEl.style.display = 'none';
+        spinnerEl.style.display = 'block';
+        retryButton.style.display = 'none';
+        attemptLogin();
+      });
+    });
+  </script>
+</body>
+</html> 
