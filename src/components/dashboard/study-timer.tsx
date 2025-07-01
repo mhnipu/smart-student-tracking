@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StudySessionList } from "./study-session-list";
+import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
 
 interface Subject {
   id: string;
@@ -94,11 +95,19 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
             if (mode === MODES.POMODORO.id) {
               setPomodoroCount(prev => prev + 1);
               toast.success("Pomodoro complete! Time for a break.");
+              sendNotification(
+                "Pomodoro Complete! ✅", 
+                "Great job! You've completed your focus session. Time for a break."
+              );
               // Auto-switch to break
               const newMode = (pomodoroCount + 1) % 4 === 0 ? MODES.LONG_BREAK.id : MODES.SHORT_BREAK.id;
               setMode(newMode);
             } else {
               toast.info("Break's over! Back to work.");
+              sendNotification(
+                "Break Time Over ⏰", 
+                "Your break has ended. Time to get back to work!"
+              );
               setMode(MODES.POMODORO.id);
             }
             return 0;
@@ -119,6 +128,11 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
     loadTodayStats();
     loadUserStats();
   }, [userId]);
+
+  useEffect(() => {
+    // Request notification permission when component mounts
+    requestNotificationPermission();
+  }, []);
 
   const loadUserStats = async () => {
     try {

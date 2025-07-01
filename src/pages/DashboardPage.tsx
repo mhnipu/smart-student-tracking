@@ -20,6 +20,7 @@ import { FlashcardsWidget } from "@/components/dashboard/flashcards-widget";
 import { EnhancedSuggestions } from "@/components/dashboard/enhanced-suggestions";
 import { ContextAwareAI } from "@/components/dashboard/context-aware-ai";
 import { StudySessionList } from "@/components/dashboard/study-session-list";
+import { SubjectList } from "@/components/dashboard/subject-list";
 import { 
   TrendingUp, 
   BookOpen, 
@@ -405,7 +406,8 @@ export default function DashboardPage() {
       const { data: subjectsData, error } = await supabase
         .from('subjects')
         .select('*')
-        .order('name', { ascending: true });
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: false });
 
       if (error) {
         if (error.code === 'PGRST109') {
@@ -439,11 +441,11 @@ export default function DashboardPage() {
     try {
       console.log('Creating default subjects...');
       const defaultSubjects = [
-        { name: 'Mathematics', code: 'MATH', color: '#3B82F6', category: 'STEM' },
-        { name: 'English', code: 'ENG', color: '#10B981', category: 'Language Arts' },
-        { name: 'Science', code: 'SCI', color: '#F59E0B', category: 'STEM' },
-        { name: 'History', code: 'HIST', color: '#EF4444', category: 'Social Studies' },
-        { name: 'Art', code: 'ART', color: '#8B5CF6', category: 'Creative' }
+        { name: 'Mathematics', code: 'MATH', color: '#3B82F6', category: 'STEM', user_id: user!.id },
+        { name: 'English', code: 'ENG', color: '#10B981', category: 'Language Arts', user_id: user!.id },
+        { name: 'Science', code: 'SCI', color: '#F59E0B', category: 'STEM', user_id: user!.id },
+        { name: 'History', code: 'HIST', color: '#EF4444', category: 'Social Studies', user_id: user!.id },
+        { name: 'Art', code: 'ART', color: '#8B5CF6', category: 'Creative', user_id: user!.id }
       ];
 
       const { data, error } = await supabase
@@ -962,47 +964,84 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50">
+      <header className="bg-white/70 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-2.5 shadow-lg">
-                <TrendingUp className="h-6 w-6 text-white" />
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-2.5 shadow-md flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">
                   SmartStudent
                 </h1>
-                <p className="text-xs text-gray-500">Professional Learning Platform</p>
+                <p className="text-xs text-gray-500 font-medium">Professional Learning Platform</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              <ThemeToggle />
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="hidden sm:flex">
+                <ThemeToggle />
+              </div>
+              
               <Button 
                 onClick={() => setShowAddMark(true)} 
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm text-white hidden sm:flex"
+                size="sm"
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Assessment
+                <Plus className="h-4 w-4 mr-1.5" />
+                Add Mark
               </Button>
               
-              <div className="flex items-center space-x-3">
-                <div className="bg-gradient-to-r from-gray-100 to-gray-200 rounded-full p-2">
-                  <User className="h-5 w-5 text-gray-600" />
-                </div>
-                <div className="text-sm">
-                  <p className="font-medium text-gray-900">{user.user_metadata?.name || user.email}</p>
-                  <p className="text-gray-500">{user.email}</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={handleSignOut}
-                  className="hover:bg-red-50 hover:text-red-600"
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
+              <div className="flex items-center gap-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="p-1.5 h-auto rounded-full" size="sm">
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8 border border-gray-200">
+                          <AvatarImage src={`https://avatar.vercel.sh/${user.id}?size=32`} />
+                          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs">
+                            {user.user_metadata?.name?.split(' ').map((n: string) => n[0]).join('') || user.email?.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="hidden md:block text-left">
+                          <p className="text-sm font-medium line-clamp-1">{user.user_metadata?.name || 'User'}</p>
+                          <p className="text-xs text-gray-500 line-clamp-1">{user.email}</p>
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-gray-500 hidden sm:block" />
+                      </div>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <div className="flex items-center gap-2 p-2 md:hidden">
+                      <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-medium">
+                        {user.user_metadata?.name?.split(' ').map((n: string) => n[0]).join('') || user.email?.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium">{user.user_metadata?.name || 'User'}</p>
+                        <p className="text-xs text-gray-500">{user.email}</p>
+                      </div>
+                    </div>
+                    <DropdownMenuSeparator className="md:hidden" />
+                    <DropdownMenuItem onClick={() => setShowAddMark(true)} className="sm:hidden cursor-pointer">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add New Mark
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer">
+                      <User className="h-4 w-4 mr-2" />
+                      My Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Bell className="h-4 w-4 mr-2" />
+                      Notifications
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut} className="text-red-600 cursor-pointer">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
@@ -1010,10 +1049,50 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Dashboard Header with Welcome Message and Summary */}
+        <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-100">
+          <div className="flex flex-col justify-between gap-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Welcome back, {user?.user_metadata?.name || 'Student'}</h1>
+                <p className="text-gray-600 mt-1">
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+              <div className="hidden sm:block">
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col items-end">
+                    <span className="text-sm text-gray-500">Your average</span>
+                    <span className="text-xl font-bold text-blue-600">{analytics?.averageScore.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-10 w-10 rounded-full flex items-center justify-center bg-blue-600 text-white font-bold text-lg">
+                    {analytics ? getGradeLetter(analytics.averageScore) : 'N/A'}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-3 flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-blue-600" />
+                <span className="text-sm text-gray-600">Study Time: <span className="font-medium">{formatStudyTime(userStats.totalStudyTime)}</span></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Flame className="h-4 w-4 text-orange-500" />
+                <span className="text-sm text-gray-600">Streak: <span className="font-medium">{userStats.currentStreak} days</span></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-purple-600" />
+                <span className="text-sm text-gray-600">Weekly Progress: <span className="font-medium">{userStats.weeklyProgress.toFixed(0)}%</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Dashboard Stats Cards with improved visuals and functionality */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-xl relative overflow-hidden group hover:from-blue-600 hover:to-blue-700 transition-colors">
-            <div className="absolute inset-0 opacity-30 bg-pattern-grid"></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5 mb-8">
+          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all duration-300 hover:translate-y-[-2px]">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent)]"></div>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <CardTitle className="text-sm font-medium">Overall Average</CardTitle>
               <div className="bg-white/20 p-1.5 rounded-full">
@@ -1032,12 +1111,12 @@ export default function DashboardPage() {
                 }`}></span>
                 Grade: {analytics ? getGradeLetter(analytics.averageScore) : 'N/A'}
                 
-                <Badge className="ml-auto bg-white/20 hover:bg-white/30" onClick={() => setShowAddMark(true)}>+ Add</Badge>
+                <Badge className="ml-auto bg-white/20 hover:bg-white/30 cursor-pointer" onClick={() => setShowAddMark(true)}>+ Add</Badge>
               </div>
               
-              <div className="absolute bottom-0 left-0 w-full h-1 bg-white/20">
+              <div className="absolute bottom-0 left-0 w-full h-2 bg-white/20">
                 <div 
-                  className="h-full bg-white/60" 
+                  className="h-full bg-white/60 rounded-r-full" 
                   style={{ 
                     width: `${analytics?.averageScore || 0}%`,
                     maxWidth: '100%'
@@ -1047,8 +1126,8 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-xl relative overflow-hidden group hover:from-emerald-600 hover:to-emerald-700 transition-colors">
-            <div className="absolute inset-0 opacity-30 bg-pattern-grid"></div>
+          <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all duration-300 hover:translate-y-[-2px]">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent)]"></div>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <CardTitle className="text-sm font-medium">Study Streak</CardTitle>
               <div className="bg-white/20 p-1.5 rounded-full">
@@ -1090,8 +1169,8 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-xl relative overflow-hidden group hover:from-purple-600 hover:to-purple-700 transition-colors">
-            <div className="absolute inset-0 opacity-30 bg-pattern-grid"></div>
+          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all duration-300 hover:translate-y-[-2px]">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent)]"></div>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <CardTitle className="text-sm font-medium">Weekly Goal</CardTitle>
               <div className="bg-white/20 p-1.5 rounded-full">
@@ -1127,12 +1206,12 @@ export default function DashboardPage() {
           </Card>
 
           <Card 
-            className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0 shadow-xl relative overflow-hidden group hover:from-orange-600 hover:to-orange-700 transition-colors cursor-pointer"
+            className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all duration-300 hover:translate-y-[-2px] cursor-pointer"
             onClick={() => {
               setShowStudyTimeDialog(true);
             }}
           >
-            <div className="absolute inset-0 opacity-30 bg-pattern-grid"></div>
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent)]"></div>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <CardTitle className="text-sm font-medium">Study Time</CardTitle>
               <div className="bg-white/20 p-1.5 rounded-full">
@@ -1167,8 +1246,8 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-pink-500 to-pink-600 text-white border-0 shadow-xl relative overflow-hidden group hover:from-pink-600 hover:to-pink-700 transition-colors">
-            <div className="absolute inset-0 opacity-30 bg-pattern-grid"></div>
+          <Card className="bg-gradient-to-br from-pink-500 to-pink-600 text-white border-0 shadow-lg relative overflow-hidden group hover:shadow-xl transition-all duration-300 hover:translate-y-[-2px]">
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent)]"></div>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
               <CardTitle className="text-sm font-medium">Achievement Points</CardTitle>
               <div className="bg-white/20 p-1.5 rounded-full">
@@ -1196,7 +1275,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="text-xs mt-1.5">
                 {userStats.achievementPoints > 500 ? 'Outstanding achiever!' : 
                  userStats.achievementPoints > 250 ? 'Great progress!' : 
@@ -1208,158 +1287,383 @@ export default function DashboardPage() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-fit bg-white/80 backdrop-blur-md border border-gray-200/50">
-            <TabsTrigger value="overview" className="flex items-center space-x-2 data-[state=active]:bg-blue-100">
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Overview</span>
-            </TabsTrigger>
-            <TabsTrigger value="performance" className="flex items-center space-x-2 data-[state=active]:bg-green-100">
-              <TrendingUp className="h-4 w-4" />
-              <span className="hidden sm:inline">Performance</span>
-            </TabsTrigger>
-            <TabsTrigger value="subjects" className="flex items-center space-x-2 data-[state=active]:bg-purple-100">
-              <BookOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">Subjects</span>
-            </TabsTrigger>
-            <TabsTrigger value="study" className="flex items-center space-x-2 data-[state=active]:bg-orange-100">
-              <Clock className="h-4 w-4" />
-              <span className="hidden sm:inline">Study</span>
-            </TabsTrigger>
-            <TabsTrigger value="goals" className="flex items-center space-x-2 data-[state=active]:bg-pink-100">
-              <Target className="h-4 w-4" />
-              <span className="hidden sm:inline">Goals</span>
-            </TabsTrigger>
-            <TabsTrigger value="ai" className="flex items-center space-x-2 data-[state=active]:bg-indigo-100">
-              <Brain className="h-4 w-4" />
-              <span className="hidden sm:inline">AI</span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex justify-between items-center mb-2">
+            <TabsList className="grid grid-cols-6 lg:w-fit bg-white/80 backdrop-blur-md border border-gray-200/50 shadow-sm rounded-lg">
+              <TabsTrigger value="overview" className="flex items-center gap-2 data-[state=active]:bg-blue-100/80 data-[state=active]:text-blue-700">
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Overview</span>
+              </TabsTrigger>
+              <TabsTrigger value="performance" className="flex items-center gap-2 data-[state=active]:bg-green-100/80 data-[state=active]:text-green-700">
+                <TrendingUp className="h-4 w-4" />
+                <span className="hidden sm:inline">Performance</span>
+              </TabsTrigger>
+              <TabsTrigger value="subjects" className="flex items-center gap-2 data-[state=active]:bg-purple-100/80 data-[state=active]:text-purple-700">
+                <BookOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">Subjects</span>
+              </TabsTrigger>
+              <TabsTrigger value="study" className="flex items-center gap-2 data-[state=active]:bg-orange-100/80 data-[state=active]:text-orange-700">
+                <Clock className="h-4 w-4" />
+                <span className="hidden sm:inline">Study</span>
+              </TabsTrigger>
+              <TabsTrigger value="goals" className="flex items-center gap-2 data-[state=active]:bg-pink-100/80 data-[state=active]:text-pink-700">
+                <Target className="h-4 w-4" />
+                <span className="hidden sm:inline">Goals</span>
+              </TabsTrigger>
+              <TabsTrigger value="ai-insights" className="flex items-center gap-2 data-[state=active]:bg-indigo-100/80 data-[state=active]:text-indigo-700">
+                <Brain className="h-4 w-4" />
+                <span className="hidden sm:inline">AI</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="overview" className="space-y-4 p-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <Card className="bg-white/80 backdrop-blur-md border-0 shadow-md transition-all hover:shadow-lg">
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card className="bg-white shadow-md rounded-xl border-0 lg:col-span-2 hover:shadow-lg transition-all">
                 <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
                     <TrendingUp className="h-5 w-5 text-blue-600" />
                     <span>Performance Trend</span>
                   </CardTitle>
-                  <CardDescription>Your weekly performance over the last month</CardDescription>
+                  <CardDescription>Your weekly performance over time</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {analytics && <PerformanceChart data={analytics.weeklyTrend} />}
+                  {isLoading ? (
+                    <div className="h-[300px] flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                    </div>
+                  ) : analytics ? (
+                    <PerformanceChart data={analytics.weeklyTrend} />
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">No performance data available</div>
+                  )}
                 </CardContent>
               </Card>
               
-              <Card className="bg-white/80 backdrop-blur-md border-0 shadow-md transition-all hover:shadow-lg">
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
                 <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Star className="h-5 w-5 text-yellow-600" />
-                    <span>Recent Assessments</span>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Star className="h-5 w-5 text-yellow-500" />
+                    <span>Recent Marks</span>
                   </CardTitle>
                   <CardDescription>Your latest test results</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {analytics && <RecentMarks marks={analytics.recentMarks} />}
-                </CardContent>
-              </Card>
-              
-              <div className="col-span-1 md:col-span-2 lg:col-span-3">
-                <ContextAwareAI userId={user?.id || ''} updateCounter={aiRefreshCounter} />
-              </div>
-              
-              <Card className="bg-white/80 backdrop-blur-md border-0 shadow-md transition-all hover:shadow-lg col-span-1 md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <BarChart3 className="h-5 w-5 text-blue-600" />
-                    <span>Performance Analytics</span>
-                  </CardTitle>
-                  <CardDescription>Detailed breakdown of your academic performance</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {analytics && <PerformanceChart data={analytics.weeklyTrend} />}
+                  {isLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <Skeleton key={i} className="h-16 w-full" />
+                      ))}
+                    </div>
+                  ) : analytics?.recentMarks && analytics.recentMarks.length > 0 ? (
+                    <RecentMarks marks={analytics.recentMarks} />
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <div className="mb-2">No marks recorded yet</div>
+                      <Button onClick={() => setShowAddMark(true)} variant="outline" size="sm">
+                        <Plus className="h-4 w-4 mr-1" /> Add Your First Mark
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
-
+            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AchievementsWidget userId={user.id} />
-              <AIInsightsWidget userId={user.id} />
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <BookOpen className="h-5 w-5 text-emerald-600" />
+                    <span>Subject Breakdown</span>
+                  </CardTitle>
+                  <CardDescription>Performance across different subjects</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <Skeleton className="h-[300px] w-full" />
+                  ) : analytics ? (
+                    <SubjectBreakdown data={analytics.subjectPerformance} />
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">No subject data available</div>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all relative overflow-hidden">
+                <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs px-3 py-1 rounded-bl-lg">AI Powered</div>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Sparkles className="h-5 w-5 text-blue-600" />
+                    <span>Personalized Insights</span>
+                  </CardTitle>
+                  <CardDescription>AI-generated suggestions for improvement</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="space-y-3">
+                      <Skeleton className="h-24 w-full" />
+                      <Skeleton className="h-24 w-full" />
+                    </div>
+                  ) : (
+                    <ContextAwareAI userId={user?.id || ''} updateCounter={aiRefreshCounter} />
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="performance" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-white/80 backdrop-blur-md border-0 shadow-xl">
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
                 <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
                     <BarChart3 className="h-5 w-5 text-blue-600" />
                     <span>Performance Analytics</span>
                   </CardTitle>
                   <CardDescription>Detailed breakdown of your academic performance</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {analytics && <PerformanceChart data={analytics.weeklyTrend} />}
+                  {isLoading ? (
+                    <div className="h-[300px] flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                    </div>
+                  ) : analytics ? (
+                    <PerformanceChart data={analytics.weeklyTrend} />
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">No performance data available</div>
+                  )}
                 </CardContent>
               </Card>
               
-              <div className="space-y-6">
-                <AchievementsWidget userId={user.id} />
-              </div>
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Award className="h-5 w-5 text-yellow-500" />
+                    <span>Achievements</span>
+                  </CardTitle>
+                  <CardDescription>Your academic milestones and rewards</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AchievementsWidget userId={user.id} />
+                </CardContent>
+              </Card>
             </div>
-          </TabsContent>
-
-          <TabsContent value="subjects" className="space-y-6">
-            <Card className="bg-white/80 backdrop-blur-md border-0 shadow-xl">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <BookOpen className="h-5 w-5 text-purple-600" />
-                  <span>Subject Breakdown</span>
+            
+            <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+              <CardHeader className="border-b pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <BookOpen className="h-5 w-5 text-emerald-600" />
+                  <span>Test Type Performance</span>
                 </CardTitle>
-                <CardDescription>Performance analysis by subject</CardDescription>
+                <CardDescription>Compare performance across different assessment types</CardDescription>
               </CardHeader>
-              <CardContent>
-                {analytics && <SubjectBreakdown data={analytics.subjectPerformance} />}
+              <CardContent className="pt-6">
+                {isLoading ? (
+                  <Skeleton className="h-[200px] w-full" />
+                ) : analytics?.testTypePerformance ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {Object.values(analytics.testTypePerformance).map((type: any) => (
+                      <Card key={type.name} className="overflow-hidden border border-gray-100">
+                        <CardHeader className="bg-gray-50 py-3">
+                          <CardTitle className="text-base">{type.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                          <div className="text-3xl font-bold text-gray-900">{type.average.toFixed(1)}%</div>
+                          <div className="text-xs text-gray-500">
+                            {type.count} {type.count === 1 ? 'assessment' : 'assessments'}
+                          </div>
+                          <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${
+                                type.average >= 90 ? 'bg-green-500' :
+                                type.average >= 80 ? 'bg-blue-500' :
+                                type.average >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`} 
+                              style={{ width: `${type.average}%` }}
+                            ></div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500">No test type data available</div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="study" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StudyTimer userId={user.id} subjects={subjects} />
-              <FlashcardsWidget userId={user.id} />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StudySessionList 
+          <TabsContent value="subjects" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <BookOpen className="h-5 w-5 text-purple-600" />
+                    <span>Subject Performance</span>
+                  </CardTitle>
+                  <CardDescription>Performance analysis across all subjects</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <Skeleton className="h-[300px] w-full" />
+                  ) : analytics ? (
+                    <SubjectBreakdown data={analytics.subjectPerformance} />
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">No subject data available</div>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <SubjectList 
                 userId={user.id} 
-                limit={10} 
-                onSessionsLoaded={(totalMinutes) => {
-                  // Always update user stats with the total study time
-                  if (totalMinutes > 0) {
-                    setUserStats(prev => ({
-                      ...prev,
-                      totalStudyTime: totalMinutes
-                    }));
-                  }
+                existingSubjects={subjects}
+                onSubjectAdded={() => {
+                  loadSubjects();
+                  loadMarksAndAnalytics();
                 }}
               />
-              <QuickNotes userId={user.id} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="study" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Clock className="h-5 w-5 text-orange-500" />
+                    <span>Study Timer</span>
+                  </CardTitle>
+                  <CardDescription>Track your study sessions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <StudyTimer userId={user.id} subjects={subjects} />
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <BookOpen className="h-5 w-5 text-blue-500" />
+                    <span>Flashcards</span>
+                  </CardTitle>
+                  <CardDescription>Review key concepts with flashcards</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <FlashcardsWidget userId={user.id} />
+                </CardContent>
+              </Card>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Calendar className="h-5 w-5 text-indigo-500" />
+                    <span>Study Sessions</span>
+                  </CardTitle>
+                  <CardDescription>Your recent study activity</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <StudySessionList 
+                    userId={user.id} 
+                    limit={10} 
+                    onSessionsLoaded={(totalMinutes) => {
+                      if (totalMinutes > 0) {
+                        setUserStats(prev => ({
+                          ...prev,
+                          totalStudyTime: totalMinutes
+                        }));
+                      }
+                    }}
+                  />
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <BookOpen className="h-5 w-5 text-pink-500" />
+                    <span>Quick Notes</span>
+                  </CardTitle>
+                  <CardDescription>Jot down important information</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <QuickNotes userId={user.id} />
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="goals" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <GoalsWidget userId={user.id} />
-              <EnhancedSuggestions userId={user.id} onAction={handleSuggestionAction} />
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Target className="h-5 w-5 text-pink-600" />
+                    <span>Academic Goals</span>
+                  </CardTitle>
+                  <CardDescription>Set and track your learning objectives</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <GoalsWidget userId={user.id} />
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Zap className="h-5 w-5 text-amber-500" />
+                    <span>Personalized Suggestions</span>
+                  </CardTitle>
+                  <CardDescription>Tailored recommendations for improvement</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EnhancedSuggestions userId={user.id} onAction={handleSuggestionAction} />
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
-          <TabsContent value="ai" className="space-y-6">
-            <div className="grid grid-cols-1 gap-6">
-              <ContextAwareAI userId={user.id} updateCounter={aiRefreshCounter} />
-            </div>
+          <TabsContent value="ai-insights" className="space-y-6">
+            <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs px-3 py-1 rounded-bl-lg">AI Powered</div>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Sparkles className="h-5 w-5 text-blue-600" />
+                  <span>AI Academic Assistant</span>
+                </CardTitle>
+                <CardDescription>Get personalized academic advice and insights</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ContextAwareAI userId={user.id} updateCounter={aiRefreshCounter} />
+              </CardContent>
+            </Card>
+            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AIInsightsWidget userId={user.id} />
-              <EnhancedSuggestions userId={user.id} onAction={handleSuggestionAction} />
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Brain className="h-5 w-5 text-purple-600" />
+                    <span>AI Insights</span>
+                  </CardTitle>
+                  <CardDescription>Smart analysis of your performance</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AIInsightsWidget userId={user.id} />
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-white shadow-md rounded-xl border-0 hover:shadow-lg transition-all">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Zap className="h-5 w-5 text-amber-500" />
+                    <span>AI Recommendations</span>
+                  </CardTitle>
+                  <CardDescription>AI-powered suggestions for improvement</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EnhancedSuggestions userId={user.id} onAction={handleSuggestionAction} />
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>

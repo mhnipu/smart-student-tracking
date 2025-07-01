@@ -20,7 +20,8 @@ CREATE TABLE public.study_sessions (
   notes text,
   subject_id uuid,
   created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
+  updated_at timestamptz DEFAULT now(),
+  test_type text NOT NULL CHECK (test_type IN ('quiz', 'exam', 'assignment', 'project'))
 );
 
 -- Create RLS policy for study_sessions
