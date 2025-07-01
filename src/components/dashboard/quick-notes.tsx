@@ -190,7 +190,7 @@ export function QuickNotes({ userId }: QuickNotesProps) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
         {/* Add Note Form */}
         {isAdding && (
           <div className="border rounded-lg p-3 space-y-3 bg-blue-50">

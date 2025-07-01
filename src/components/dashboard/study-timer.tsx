@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Square, Clock, BookOpen, AlertCircle, RefreshCw, Settings, Music, BellOff } from "lucide-react";
+import { Play, Pause, Square, Clock, BookOpen, AlertCircle, RefreshCw, Settings } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { StudySessionList } from "./study-session-list";
 
 interface Subject {
   id: string;
@@ -23,6 +24,12 @@ interface StudyTimerProps {
   subjects: Subject[];
 }
 
+interface TimerSettings {
+  pomodoro: number;
+  shortBreak: number;
+  longBreak: number;
+}
+
 const MODES = {
   POMODORO: { id: 'pomodoro', label: 'Pomodoro' },
   SHORT_BREAK: { id: 'short_break', label: 'Short Break' },
@@ -30,7 +37,7 @@ const MODES = {
 };
 
 export function StudyTimer({ userId, subjects }: StudyTimerProps) {
-  const [timerSettings, setTimerSettings] = useState({
+  const [timerSettings, setTimerSettings] = useState<TimerSettings>({
     pomodoro: 25,
     shortBreak: 5,
     longBreak: 15,
@@ -41,12 +48,15 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
   const [time, setTime] = useState(timerSettings.pomodoro * 60);
   const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [pomodoroCount, setPomodoroCount] = useState(0);
-  const [sessionType, setSessionType] = useState<string>("study");
   const [currentSession, setCurrentSession] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [todayTime, setTodayTime] = useState("0h 0m");
-  const [demoMode, setDemoMode] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [userStats, setUserStats] = useState({
+    total_study_time: 0,
+    achievement_points: 0,
+    current_streak: 0
+  });
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -71,7 +81,7 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
 
   useEffect(() => {
     resetTimer();
-  }, [mode, timerSettings]);
+  }, [mode, timerSettings, resetTimer]);
   
   useEffect(() => {
     if (isRunning) {
@@ -107,39 +117,70 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
   
   useEffect(() => {
     loadTodayStats();
+    loadUserStats();
   }, [userId]);
 
-  const loadTodayStats = async () => {
+  const loadUserStats = async () => {
     try {
-      // Set a default value for demo mode
-      if (subjects.some(s => s.id.startsWith('mock-'))) {
-        setDemoMode(true);
-        setTodayTime("2h 15m");
+      const { data, error } = await supabase
+        .from('users')
+        .select('total_study_time, achievement_points, current_streak')
+        .eq('id', userId)
+        .single();
+        
+      if (error) {
+        console.error("Error loading user stats:", error);
         return;
       }
       
+      if (data) {
+        setUserStats({
+          total_study_time: data.total_study_time || 0,
+          achievement_points: data.achievement_points || 0,
+          current_streak: data.current_streak || 0
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load user stats:", err);
+    }
+  };
+
+  const loadTodayStats = async () => {
+    try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
       const { data, error } = await supabase
         .from('study_sessions')
-        .select('duration_minutes')
+        .select('*')
         .eq('user_id', userId)
         .gte('start_time', today.toISOString());
         
       if (error) {
         console.error("Error loading today's stats:", error);
-        // If database table doesn't exist, use demo data
-        if (error.code === 'PGRST109') {
-          setDemoMode(true);
-          setTodayTime("2h 15m");
-        } else {
-          setError("Couldn't load study statistics");
-        }
+        setError("Couldn't load study statistics");
         return;
       }
       
-      const totalMinutes = data?.reduce((sum, session) => sum + (session.duration_minutes || 0), 0) || 0;
+      // Calculate total minutes from sessions
+      let totalMinutes = 0;
+      
+      if (data && data.length > 0) {
+        data.forEach(session => {
+          // If we have end_time, calculate duration
+          if (session.end_time && session.start_time) {
+            const start = new Date(session.start_time);
+            const end = new Date(session.end_time);
+            const durationMinutes = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
+            totalMinutes += durationMinutes;
+          } 
+          // If we have duration_minutes, use that
+          else if (session.duration_minutes) {
+            totalMinutes += session.duration_minutes;
+          }
+        });
+      }
+      
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
       
@@ -172,87 +213,47 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
   const progress = totalTime > 0 ? ((totalTime - time) / totalTime) * 100 : 0;
   
   const startSession = async () => {
+    // If we're in a break mode, we can start without a subject
     if (!selectedSubject && mode === MODES.POMODORO.id) {
-      toast.error("Please select a subject first");
-      return;
+      // Check if any subjects are available
+      if (subjects && subjects.length > 0) {
+        toast.error("Please select a subject first");
+        return;
+      } else {
+        // If no subjects available, create a general study session
+        setSelectedSubject("general");
+      }
     }
     
-    // Check if we should use demo mode
-    if (demoMode || subjects.some(s => s.id.startsWith('mock-'))) {
-      console.log("Using demo mode for session");
-      setDemoMode(true);
-      const mockSession = {
-        id: `mock-session-${Date.now()}`,
-        title: `${sessionType.charAt(0).toUpperCase() + sessionType.slice(1)} Session`,
-        start_time: new Date().toISOString(),
-        session_type: sessionType,
-        user_id: userId,
-        subject_id: selectedSubject
-      };
-      
-      setCurrentSession(mockSession);
-      setIsRunning(true);
-      toast.success("Study session started! (Demo Mode)");
-      return;
-    }
-
+    // Always enable the timer to run
+    setIsRunning(true);
+    
     try {
-      console.log("Trying to create real session");
+      // Create a basic session with minimal fields
       const { data, error } = await supabase
         .from('study_sessions')
         .insert({
-          title: `${sessionType.charAt(0).toUpperCase() + sessionType.slice(1)} Session`,
-          start_time: new Date().toISOString(),
-          session_type: sessionType,
           user_id: userId,
-          subject_id: selectedSubject
+          start_time: new Date().toISOString(),
+          subject_id: selectedSubject || null,
+          title: "Study Session"
         })
         .select()
         .single();
 
       if (error) {
-        console.error("Error starting session:", error);
-        
-        // Force demo mode for any database error
-        // PGRST109 = table doesn't exist
-        // PGRST204 = column doesn't exist in schema cache
-        console.log("Falling back to demo mode due to database error code:", error.code);
-        setDemoMode(true);
-        const mockSession = {
-          id: `mock-session-${Date.now()}`,
-          title: `${sessionType.charAt(0).toUpperCase() + sessionType.slice(1)} Session`,
-          start_time: new Date().toISOString(),
-          session_type: sessionType,
-          user_id: userId,
-          subject_id: selectedSubject
-        };
-        
-        setCurrentSession(mockSession);
-        setIsRunning(true);
-        toast.success("Study session started! (Demo Mode)");
+        console.error("Error creating session:", error);
+        toast.error("Could not save session to database");
         return;
       }
 
-      setCurrentSession(data);
-      setIsRunning(true);
-      toast.success("Study session started!");
+      if (data) {
+        setCurrentSession(data);
+        toast.success("Study session started!");
+      }
     } catch (error) {
-      console.error("Error starting session:", error);
-      
-      // Fall back to demo mode on any error
-      setDemoMode(true);
-      const mockSession = {
-        id: `mock-session-${Date.now()}`,
-        title: `${sessionType.charAt(0).toUpperCase() + sessionType.slice(1)} Session`,
-        start_time: new Date().toISOString(),
-        session_type: sessionType,
-        user_id: userId,
-        subject_id: selectedSubject
-      };
-      
-      setCurrentSession(mockSession);
-      setIsRunning(true);
-      toast.success("Study session started! (Demo Mode)");
+      console.error("Exception starting session:", error);
+      toast.error("Could not start session");
     }
   };
 
@@ -267,116 +268,115 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
   const endSession = async () => {
     if (!currentSession) return;
     
-    // In demo mode, just update local state
-    if (demoMode || currentSession.id.startsWith('mock-')) {
+    // Calculate session duration
+    const minutesCompleted = Math.max(1, Math.floor((totalTime - time) / 60));
+    const secondsCompleted = totalTime - time;
+    const formattedDuration = formatTime(secondsCompleted);
+    
+    // Ensure minimum duration (5 seconds) to count as a session
+    if (secondsCompleted < 5) {
       setIsRunning(false);
       setCurrentSession(null);
-      
-      // Update today's time
-      const minutesCompleted = totalTime - time;
-      const hours = Math.floor(minutesCompleted / 60 / 60);
-      const mins = Math.floor((minutesCompleted / 60) % 60);
-      
-      // Parse current total hours
-      const currentHours = parseInt(todayTime.split('h ')[0]) || 0;
-      const currentMins = parseInt(todayTime.split('h ')[1]?.split('m')[0]) || 0;
-      
-      // Calculate new total
-      let newMins = currentMins + mins;
-      let newHours = currentHours + hours;
-      
-      // Handle minute overflow
-      if (newMins >= 60) {
-        newHours += Math.floor(newMins / 60);
-        newMins = newMins % 60;
-      }
-      
-      setTodayTime(`${newHours}h ${newMins}m`);
-      
-      toast.success(`Study session completed! Duration: ${formatTime(totalTime - time)}`);
+      resetTimer();
+      toast.info("Session was too short to record");
       return;
     }
-
+    
+    // Update UI state early for better responsiveness
+    setIsRunning(false);
+    setPomodoroCount(prev => prev + (mode === MODES.POMODORO.id && secondsCompleted > 60 ? 1 : 0));
+    
+    // Calculate achievement points earned
+    const pointsEarned = Math.floor(minutesCompleted / 5) + (pomodoroCount * 2);
+    
     try {
+      // Update the session with end_time, duration_minutes, is_completed, and points_earned
       const { error } = await supabase
         .from('study_sessions')
         .update({
           end_time: new Date().toISOString(),
-          duration_minutes: Math.floor((totalTime - time) / 60),
-          notes: `Session duration: ${formatTime(totalTime - time)}`
+          duration_minutes: minutesCompleted,
+          is_completed: true,
+          points_earned: pointsEarned,
+          pomodoro_count: mode === MODES.POMODORO.id ? pomodoroCount : 0
         })
         .eq('id', currentSession.id);
 
       if (error) {
-        console.error("Error ending session:", error);
-        
-        // Fall back to demo mode on database error
-        console.log("Using demo mode to end session due to database error:", error.code);
-        
-        setIsRunning(false);
-        setCurrentSession(null);
-        
-        // Update today's time in demo mode
-        const minutesCompleted = totalTime - time;
-        const hours = Math.floor(minutesCompleted / 60 / 60);
-        const mins = Math.floor((minutesCompleted / 60) % 60);
-        
-        // Parse current total hours
-        const currentHours = parseInt(todayTime.split('h ')[0]) || 0;
-        const currentMins = parseInt(todayTime.split('h ')[1]?.split('m')[0]) || 0;
-        
-        // Calculate new total
-        let newMins = currentMins + mins;
-        let newHours = currentHours + hours;
-        
-        // Handle minute overflow
-        if (newMins >= 60) {
-          newHours += Math.floor(newMins / 60);
-          newMins = newMins % 60;
+        console.error("Error updating session:", error);
+        toast.error("Could not save session details");
+      } else {
+        // Update user stats in database
+        try {
+          await supabase
+            .from('users')
+            .update({
+              total_study_time: userStats.total_study_time + minutesCompleted,
+              achievement_points: userStats.achievement_points + pointsEarned,
+              current_streak: userStats.current_streak + 1,
+              last_study_date: new Date().toISOString()
+            })
+            .eq('id', userId);
+            
+          // Update local user stats
+          setUserStats(prev => ({
+            total_study_time: prev.total_study_time + minutesCompleted,
+            achievement_points: prev.achievement_points + pointsEarned,
+            current_streak: prev.current_streak + 1
+          }));
+        } catch (statsError) {
+          console.error("Error updating user stats:", statsError);
         }
-        
-        setTodayTime(`${newHours}h ${newMins}m`);
-        
-        toast.success(`Study session completed! Duration: ${formatTime(totalTime - time)} (Demo Mode)`);
-        return;
       }
-
-      setIsRunning(false);
+      
+      // Dispatch a custom event with the session data
+      const sessionEvent = new CustomEvent('study-session-completed', { 
+        detail: { 
+          totalStudyTime: userStats.total_study_time + minutesCompleted,
+          sessionMinutes: minutesCompleted,
+          pointsEarned: pointsEarned
+        } 
+      });
+      window.dispatchEvent(sessionEvent);
+      
+      // Dispatch a refresh event for the study session list
+      const refreshEvent = new CustomEvent('refresh-study-sessions');
+      window.dispatchEvent(refreshEvent);
+      
       setCurrentSession(null);
+      resetTimer();
       
       // Refresh today's stats
       loadTodayStats();
       
-      toast.success(`Study session completed! Duration: ${formatTime(totalTime - time)}`);
+      toast.success(
+        <div className="space-y-1">
+          <div className="font-medium">Study session completed!</div>
+          <div className="text-sm flex items-center justify-between">
+            <span>Duration:</span>
+            <span className="font-medium">{formattedDuration}</span>
+          </div>
+          <div className="text-sm flex items-center justify-between">
+            <span>Points earned:</span>
+            <span className="font-medium text-yellow-300">+{pointsEarned}</span>
+          </div>
+          {mode === MODES.POMODORO.id && pomodoroCount > 0 && (
+            <div className="text-sm flex items-center justify-between">
+              <span>Pomodoros:</span>
+              <span className="font-medium">{pomodoroCount}</span>
+            </div>
+          )}
+        </div>,
+        { duration: 4000 }
+      );
     } catch (error) {
       console.error("Error ending session:", error);
       
-      // Fall back to demo mode
-      setIsRunning(false);
+      // Fall back to updating just local state
       setCurrentSession(null);
+      resetTimer();
       
-      // Update today's time in demo mode
-      const minutesCompleted = totalTime - time;
-      const hours = Math.floor(minutesCompleted / 60 / 60);
-      const mins = Math.floor((minutesCompleted / 60) % 60);
-      
-      // Parse current total hours 
-      const currentHours = parseInt(todayTime.split('h ')[0]) || 0;
-      const currentMins = parseInt(todayTime.split('h ')[1]?.split('m')[0]) || 0;
-      
-      // Calculate new total
-      let newMins = currentMins + mins;
-      let newHours = currentHours + hours;
-      
-      // Handle minute overflow
-      if (newMins >= 60) {
-        newHours += Math.floor(newMins / 60);
-        newMins = newMins % 60;
-      }
-      
-      setTodayTime(`${newHours}h ${newMins}m`);
-      
-      toast.success(`Study session completed! Duration: ${formatTime(totalTime - time)} (Demo Mode)`);
+      toast.error("Could not save session details, but your time was counted!");
     }
   };
 
@@ -407,7 +407,7 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
     resetTimer();
   };
 
-  const handleSaveSettings = (newSettings) => {
+  const handleSaveSettings = (newSettings: TimerSettings) => {
     setTimerSettings(newSettings);
     setIsSettingsOpen(false);
     toast.success("Timer settings saved!");
@@ -529,7 +529,11 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-4xl font-bold tracking-tighter">{formatTime(time)}</span>
-            <span className={cn("text-sm font-medium uppercase tracking-widest", theme.text)}>{MODES[mode.toUpperCase()].label}</span>
+            <span className={cn("text-sm font-medium uppercase tracking-widest", theme.text)}>
+              {mode === MODES.POMODORO.id ? MODES.POMODORO.label : 
+               mode === MODES.SHORT_BREAK.id ? MODES.SHORT_BREAK.label : 
+               mode === MODES.LONG_BREAK.id ? MODES.LONG_BREAK.label : 'Timer'}
+            </span>
           </div>
         </div>
         
@@ -571,7 +575,13 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
   );
 }
 
-function TimerSettingsDialog({ currentSettings, onSave }) {
+// Define the interface for timer settings dialog props
+interface TimerSettingsDialogProps {
+  currentSettings: TimerSettings;
+  onSave: (settings: TimerSettings) => void;
+}
+
+function TimerSettingsDialog({ currentSettings, onSave }: TimerSettingsDialogProps) {
   const [settings, setSettings] = useState(currentSettings);
 
   const handleSave = () => {

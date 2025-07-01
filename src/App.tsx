@@ -6,6 +6,8 @@ import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import { AlertCircle, DatabaseIcon, ExternalLink } from 'lucide-react'
 import { DirectLogin } from '@/components/dashboard/direct-login'
+import { useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 // Supabase Configuration Error Component
 const SupabaseConfigError = () => {
@@ -133,6 +135,24 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 function App() {
   // First check if Supabase is configured
   const supabaseConfigured = isSupabaseConfigured();
+  
+  // Test Edge Function availability
+  useEffect(() => {
+    const checkEdgeFunction = async () => {
+      try {
+        await supabase.functions.invoke('generate-insights', {
+          body: { test: true }
+        });
+        console.log('Edge Functions are available');
+      } catch (error) {
+        console.warn('Edge Functions might not be deployed:', error);
+      }
+    };
+    
+    if (supabaseConfigured) {
+      checkEdgeFunction();
+    }
+  }, [supabaseConfigured]);
   
   if (!supabaseConfigured) {
     return (
