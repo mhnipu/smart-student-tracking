@@ -20,6 +20,14 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import { useState } from "react"
@@ -28,6 +36,8 @@ const subjectSchema = z.object({
   name: z.string().min(2, { message: "Subject name must be at least 2 characters." }),
   code: z.string().min(2, { message: "Subject code must be at least 2 characters." }),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, { message: "Must be a valid hex color code." }),
+  description: z.string().optional(),
+  category: z.string().optional(),
 })
 
 interface AddSubjectDialogProps {
@@ -45,6 +55,8 @@ export function AddSubjectDialog({ userId, onSubjectAdded, children }: AddSubjec
       name: "",
       code: "",
       color: "#3b82f6",
+      description: "",
+      category: "",
     },
   })
 
@@ -64,6 +76,16 @@ export function AddSubjectDialog({ userId, onSubjectAdded, children }: AddSubjec
       form.reset()
     }
   }
+
+  const categories = [
+    { value: "STEM", label: "STEM" },
+    { value: "Language Arts", label: "Language Arts" },
+    { value: "Social Studies", label: "Social Studies" },
+    { value: "Creative Arts", label: "Creative Arts" },
+    { value: "Health & Fitness", label: "Health & Fitness" },
+    { value: "Business", label: "Business" },
+    { value: "Others", label: "Others" },
+  ]
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -121,6 +143,47 @@ export function AddSubjectDialog({ userId, onSubjectAdded, children }: AddSubjec
                         {...field}
                       />
                     </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Category</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a category" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category.value} value={category.value}>
+                          {category.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      placeholder="Add a short description about this subject"
+                      className="resize-none"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

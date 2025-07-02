@@ -77,6 +77,17 @@ export function AddMarkDialog({ open, onOpenChange, onSuccess, userId }: AddMark
   const [selectedGradeScaleId, setSelectedGradeScaleId] = useState<string>("default");
   const [newGradeScaleName, setNewGradeScaleName] = useState<string>("");
   const [useCustomGradeScale, setUseCustomGradeScale] = useState(false);
+  
+  // New states for adding subjects inline
+  const [isAddingSubject, setIsAddingSubject] = useState(false);
+  const [newSubject, setNewSubject] = useState({
+    name: "",
+    code: "",
+    color: "#3b82f6"
+    // Note: description and category are intentionally not included here
+    // as they are only for the full subject form in the subject list
+  });
+  const [subjectFormErrors, setSubjectFormErrors] = useState<Record<string, string>>({});
 
   // Standard test types with icons
   const standardTestTypes = [
@@ -391,7 +402,11 @@ export function AddMarkDialog({ open, onOpenChange, onSuccess, userId }: AddMark
     }
     
     if (!formData.date) errors.date = "Date is required";
-    if (!formData.subjectId) errors.subjectId = "Subject is required";
+    
+    // Only check subject if not currently adding a new one
+    if (!isAddingSubject && !formData.subjectId) {
+      errors.subjectId = "Subject is required";
+    }
     
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -399,6 +414,49 @@ export function AddMarkDialog({ open, onOpenChange, onSuccess, userId }: AddMark
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // If we're in the middle of adding a subject, finish that first
+    if (isAddingSubject) {
+      // Validate the subject form
+      if (!validateSubjectForm()) {
+        toast.error("Please complete the subject form first");
+        return;
+      }
+      
+      // Try to create the subject
+      try {
+        setIsLoading(true);
+        // Note: Only basic subject details are included here
+        // description and category are not part of this simplified form
+        const { data, error } = await supabase
+          .from("subjects")
+          .insert([{ ...newSubject, user_id: userId }])
+          .select();
+        
+        if (error) {
+          toast.error("Failed to add subject");
+          console.error("Error adding subject:", error);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Set the newly created subject as selected
+        if (data && data.length > 0) {
+          const newlyAddedSubject = data[0];
+          setSubjects(prev => [...prev, newlyAddedSubject]);
+          setFormData(prev => ({ ...prev, subjectId: newlyAddedSubject.id }));
+          
+          // Reset subject form
+          setNewSubject({ name: "", code: "", color: "#3b82f6" });
+          setIsAddingSubject(false);
+        }
+      } catch (error) {
+        console.error("Error adding subject:", error);
+        toast.error("Failed to add subject");
+        setIsLoading(false);
+        return;
+      }
+    }
     
     if (!validateForm()) {
       toast.error("Please correct the errors in the form");
@@ -493,6 +551,76 @@ export function AddMarkDialog({ open, onOpenChange, onSuccess, userId }: AddMark
     
     // Reset custom type mode
     setIsAddingCustomType(false);
+  };
+
+  const handleSubjectInputChange = (field: string, value: string) => {
+    setNewSubject(prev => ({ ...prev, [field]: value }));
+    
+    // Clear error for this field when user types
+    if (subjectFormErrors[field]) {
+      setSubjectFormErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
+  };
+
+  const validateSubjectForm = () => {
+    const errors: Record<string, string> = {};
+    
+    if (!newSubject.name) errors.name = "Subject name is required";
+    else if (newSubject.name.length < 2) errors.name = "Name must be at least 2 characters";
+    
+    if (!newSubject.code) errors.code = "Subject code is required";
+    else if (newSubject.code.length < 2) errors.code = "Code must be at least 2 characters";
+    
+    if (!newSubject.color) errors.color = "Color is required";
+    else if (!/^#[0-9a-fA-F]{6}$/.test(newSubject.color)) errors.color = "Must be a valid hex color";
+    
+    setSubjectFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleAddSubject = async () => {
+    if (!validateSubjectForm()) {
+      return;
+    }
+    
+    try {
+      // Note: Only basic subject details are included here
+      // description and category are not part of this simplified form
+      const { data, error } = await supabase
+        .from("subjects")
+        .insert([{ ...newSubject, user_id: userId }])
+        .select();
+      
+      if (error) {
+        toast.error("Failed to add subject");
+        console.error("Error adding subject:", error);
+        return;
+      }
+      
+      // If successful, add to subjects list
+      if (data && data.length > 0) {
+        const newlyAddedSubject = data[0];
+        
+        // Update subjects list
+        setSubjects(prev => [...prev, newlyAddedSubject]);
+        
+        // Select the new subject
+        setFormData(prev => ({ ...prev, subjectId: newlyAddedSubject.id }));
+        
+        // Reset the form and close it
+        setNewSubject({ name: "", code: "", color: "#3b82f6" });
+        setIsAddingSubject(false);
+        
+        toast.success("Subject added successfully");
+      }
+    } catch (error) {
+      console.error("Error adding subject:", error);
+      toast.error("Failed to add subject");
+    }
   };
 
   const getGradeColor = (percentage: number) => {
@@ -613,24 +741,104 @@ export function AddMarkDialog({ open, onOpenChange, onSuccess, userId }: AddMark
                   
                   <div>
                     <Label htmlFor="subjectId">Subject</Label>
-                    <Select value={formData.subjectId} onValueChange={(value) => handleInputChange("subjectId", value)}>
-                      <SelectTrigger className={cn(formErrors.subjectId && "border-red-500")}>
-                        <SelectValue placeholder="Select subject" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {subjects.map((subject) => (
-                          <SelectItem key={subject.id} value={subject.id}>
-                            <div className="flex items-center">
-                              <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: subject.color || '#ccc' }}></span>
-                              {subject.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {formErrors.subjectId && <p className="text-red-500 text-sm mt-1">{formErrors.subjectId}</p>}
                     
-                    {subjectAverage !== null && (
+                    {!isAddingSubject ? (
+                      <div className="flex gap-2">
+                        <Select value={formData.subjectId} onValueChange={(value) => handleInputChange("subjectId", value)}>
+                          <SelectTrigger className={cn(formErrors.subjectId && "border-red-500")}>
+                            <SelectValue placeholder="Select subject" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {subjects.map((subject) => (
+                              <SelectItem key={subject.id} value={subject.id}>
+                                <div className="flex items-center">
+                                  <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: subject.color || '#ccc' }}></span>
+                                  {subject.name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => setIsAddingSubject(true)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex flex-col gap-2">
+                          <Input
+                            placeholder="Subject name"
+                            value={newSubject.name}
+                            onChange={(e) => handleSubjectInputChange("name", e.target.value)}
+                            className={cn(subjectFormErrors.name && "border-red-500")}
+                            autoFocus
+                          />
+                          {subjectFormErrors.name && <p className="text-red-500 text-xs">{subjectFormErrors.name}</p>}
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Code (e.g., CS101)"
+                              value={newSubject.code}
+                              onChange={(e) => handleSubjectInputChange("code", e.target.value)}
+                              className={cn(subjectFormErrors.code && "border-red-500")}
+                            />
+                            
+                            <div className="flex gap-2">
+                              <Input
+                                type="color"
+                                value={newSubject.color}
+                                onChange={(e) => handleSubjectInputChange("color", e.target.value)}
+                                className="w-10"
+                              />
+                              <Input
+                                type="text"
+                                placeholder="#hex"
+                                value={newSubject.color}
+                                onChange={(e) => handleSubjectInputChange("color", e.target.value)}
+                                className={cn("flex-1", subjectFormErrors.color && "border-red-500")}
+                              />
+                            </div>
+                          </div>
+                          {subjectFormErrors.color && <p className="text-red-500 text-xs">{subjectFormErrors.color}</p>}
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="default"
+                            className="flex-1 bg-green-600 hover:bg-green-700"
+                            onClick={handleAddSubject}
+                          >
+                            Add Subject
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => {
+                              setIsAddingSubject(false);
+                              setNewSubject({ name: "", code: "", color: "#3b82f6" });
+                              setSubjectFormErrors({});
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {!isAddingSubject && formErrors.subjectId && <p className="text-red-500 text-sm mt-1">{formErrors.subjectId}</p>}
+                    
+                    {!isAddingSubject && subjectAverage !== null && (
                       <div className="text-xs text-gray-500 mt-1 flex items-center">
                         <span>Subject average: {subjectAverage.toFixed(1)}%</span>
                       </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { AddSubjectDialog } from "./add-subject-dialog";
+import { EditSubjectDialog } from "./edit-subject-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
@@ -21,7 +22,9 @@ import {
   BookOpen,
   Plus,
   ArrowUpDown,
-  CalendarIcon
+  CalendarIcon,
+  Edit,
+  Settings
 } from "lucide-react";
 
 interface Subject {
@@ -32,6 +35,8 @@ interface Subject {
   averageScore?: number;
   created_at?: string;
   marks?: any[];
+  description?: string;
+  category?: string;
 }
 
 interface SubjectListProps {
@@ -78,7 +83,9 @@ export function SubjectList({ userId, onSubjectAdded, existingSubjects }: Subjec
           code,
           color,
           created_at,
-          marks(score, max_score, test_name, date)
+          marks(score, max_score, test_name, date),
+          description,
+          category
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
@@ -420,6 +427,23 @@ export function SubjectList({ userId, onSubjectAdded, existingSubjects }: Subjec
                 {/* Enhanced Expanded Subject Details */}
                 {expandedSubject === subject.id && (
                   <div className="p-3 bg-gray-50 text-sm border-t border-gray-100">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-medium text-gray-700">Subject Details</h4>
+                      <EditSubjectDialog 
+                        userId={userId}
+                        subjectId={subject.id}
+                        onSubjectUpdated={loadSubjects}
+                      >
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-xs flex items-center gap-1"
+                        >
+                          <Edit className="h-3.5 w-3.5" /> Edit Subject
+                        </Button>
+                      </EditSubjectDialog>
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-4 mb-3">
                       <div className="bg-white p-2 rounded-md border border-gray-100">
                         <div className="text-xs text-gray-500 mb-1">Subject Code</div>
@@ -449,6 +473,20 @@ export function SubjectList({ userId, onSubjectAdded, existingSubjects }: Subjec
                         <div className="font-medium">{getGradeLetter(subject.averageScore || 0)} Grade</div>
                       </div>
                     </div>
+                    
+                    {subject.description && (
+                      <div className="bg-white p-2 rounded-md border border-gray-100 mb-3">
+                        <div className="text-xs text-gray-500 mb-1">Description</div>
+                        <div className="text-sm">{subject.description}</div>
+                      </div>
+                    )}
+                    
+                    {subject.category && (
+                      <div className="bg-white p-2 rounded-md border border-gray-100 mb-3">
+                        <div className="text-xs text-gray-500 mb-1">Category</div>
+                        <Badge variant="secondary">{subject.category}</Badge>
+                      </div>
+                    )}
                     
                     {subject.marks && subject.marks.length > 0 ? (
                       <>
