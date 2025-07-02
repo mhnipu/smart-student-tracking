@@ -203,7 +203,9 @@ export function SubjectBreakdown({ data }: SubjectBreakdownProps) {
           <CardTitle>Performance Visualization</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[350px] w-full">
+          <div className={`w-full custom-scrollbar overflow-auto ${subjects.length > 6 ? 'h-[400px]' : ''}`} style={{
+            height: chartType === 'bar' && subjects.length > 6 ? `${Math.min(600, 200 + (subjects.length * 30))}px` : '350px'
+          }}>
             <ResponsiveContainer width="100%" height="100%">
               {chartType === 'bar' && (
                 <BarChart data={sortedSubjects} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>

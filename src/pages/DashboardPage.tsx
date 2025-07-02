@@ -407,7 +407,7 @@ export default function DashboardPage() {
         .from('subjects')
         .select('*')
         .eq('user_id', user!.id)
-        .order('created_at', { ascending: false });
+        .order('name', { ascending: true });
 
       if (error) {
         if (error.code === 'PGRST109') {
@@ -1500,7 +1500,7 @@ export default function DashboardPage() {
                     <BookOpen className="h-5 w-5 text-purple-600" />
                     <span>Subject Performance</span>
                   </CardTitle>
-                  <CardDescription>Performance analysis across all subjects</CardDescription>
+                  <CardDescription></CardDescription>
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
@@ -1515,7 +1515,6 @@ export default function DashboardPage() {
               
               <SubjectList 
                 userId={user.id} 
-                existingSubjects={subjects}
                 onSubjectAdded={() => {
                   loadSubjects();
                   loadMarksAndAnalytics();

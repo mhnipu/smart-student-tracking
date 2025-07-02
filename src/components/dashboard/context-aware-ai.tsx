@@ -7,7 +7,6 @@ import { aiService } from "@/lib/ai-service";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { supabase } from "@/lib/supabase";
 
 interface ContextAwareAIProps {
   userId: string;
@@ -490,4 +489,5 @@ export function ContextAwareAI({ userId, updateCounter = 0 }: ContextAwareAIProp
       </CardFooter>
     </Card>
   );
-}
+}import { supabase } from "@/lib/supabase";
+

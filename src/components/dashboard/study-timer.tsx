@@ -250,7 +250,8 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
           user_id: userId,
           start_time: new Date().toISOString(),
           subject_id: selectedSubject || null,
-          title: "Study Session"
+          title: "Study Session",
+          test_type: "study"
         })
         .select()
         .single();
@@ -322,14 +323,16 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
       } else {
         // Update user stats in database
         try {
+          const updateData = {
+            total_study_time: userStats.total_study_time + minutesCompleted,
+            achievement_points: userStats.achievement_points + pointsEarned,
+            current_streak: userStats.current_streak + 1,
+            last_study_date: new Date().toISOString()
+          };
+
           await supabase
             .from('users')
-            .update({
-              total_study_time: userStats.total_study_time + minutesCompleted,
-              achievement_points: userStats.achievement_points + pointsEarned,
-              current_streak: userStats.current_streak + 1,
-              last_study_date: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', userId);
             
           // Update local user stats

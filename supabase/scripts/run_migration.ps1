@@ -83,6 +83,6 @@ function Run-SQL-File {
 }
 
 # Run the combined fixes migration
-Run-SQL-File -filePath ".\supabase\migrations\custom_migrations\20250702200000_combined_fixes.sql" -description "Combined Database Fixes"
+Run-SQL-File -filePath "..\..\supabase\migrations\custom_migrations\20250702200000_combined_fixes.sql" -description "Combined Database Fixes"
 
 Write-Host "`nMigration process completed." -ForegroundColor Green 

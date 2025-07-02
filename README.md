@@ -443,4 +443,32 @@ If you encounter any issues or have questions:
 
 *Empowering students to track their progress and achieve their academic goals.*
 
+## Database Troubleshooting
+
+If you encounter database-related errors like:
+- "JWT expired" errors
+- "Could not find column 'x' in table 'y'"
+- Test type violations in study sessions
+
+You can use the simple database fix scripts:
+
+### For Windows Users:
+
+```powershell
+.\scripts\fix_database.ps1
+```
+
+### For Mac/Linux Users:
+
+```bash
+./scripts/fix_database.sh
+```
+
+These scripts will:
+1. Fix study sessions test_type constraints
+2. Add missing columns
+3. Update constraints that might cause errors
+
+For detailed database information and troubleshooting, see [docs/SUPABASE.md](docs/SUPABASE.md).
+
  

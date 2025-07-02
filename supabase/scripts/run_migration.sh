@@ -69,6 +69,6 @@ run_sql_file() {
 }
 
 # Run the combined fixes migration
-run_sql_file "./supabase/migrations/custom_migrations/20250702200000_combined_fixes.sql" "Combined Database Fixes"
+run_sql_file "../../supabase/migrations/custom_migrations/20250702200000_combined_fixes.sql" "Combined Database Fixes"
 
-echo -e "\n\033[0;32mMigration process completed.\033[0m"
+echo -e "\n\033[0;32mMigration process completed.\033[0m" 
