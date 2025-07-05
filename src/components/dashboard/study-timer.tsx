@@ -1,18 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Square, Clock, BookOpen, AlertCircle, RefreshCw, Settings } from "lucide-react";
+import { Play, Pause, Square, Clock, BookOpen, AlertCircle, RefreshCw, Settings, Minimize } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, useGlobalTimerStore } from "@/lib/utils";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { StudySessionList } from "./study-session-list";
-import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
+import { requestNotificationPermission } from "@/lib/notifications";
 
 interface Subject {
   id: string;
@@ -44,22 +43,57 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
     longBreak: 15,
   });
 
-  const [mode, setMode] = useState(MODES.POMODORO.id);
-  const [isRunning, setIsRunning] = useState(false);
-  const [time, setTime] = useState(timerSettings.pomodoro * 60);
+  // Local state that will sync with global state
+  const [localMode, setLocalMode] = useState(MODES.POMODORO.id);
+  const [localTime, setLocalTime] = useState(timerSettings.pomodoro * 60);
   const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [pomodoroCount, setPomodoroCount] = useState(0);
-  const [currentSession, setCurrentSession] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [todayTime, setTodayTime] = useState("0h 0m");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [todayTime, setTodayTime] = useState("0h 0m");
+  const [error, setError] = useState<string | null>(null);
   const [userStats, setUserStats] = useState({
     total_study_time: 0,
     achievement_points: 0,
     current_streak: 0
   });
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Global timer state
+  const {
+    isVisible: isTimerMinimized,
+    isRunning: isTimerRunning,
+    mode: globalMode,
+    time: globalTime,
+    setVisible: setTimerVisible,
+    setRunning: setTimerRunning,
+    setMode: setTimerMode,
+    setTime: setTimerTime,
+    setUserId: setTimerUserId,
+    setSubjectId: setTimerSubjectId,
+    setTheme: setTimerTheme
+  } = useGlobalTimerStore();
+
+  // Request notification permission on mount
+  useEffect(() => {
+    requestNotificationPermission();
+    
+    // Set the user ID in the global timer state
+    setTimerUserId(userId);
+  }, [userId, setTimerUserId]);
+  
+  // Load stats
+  useEffect(() => {
+    loadTodayStats();
+    loadUserStats();
+  }, [userId]);
+
+  // Sync local state with global state
+  useEffect(() => {
+    if (isTimerMinimized && isTimerRunning) {
+      // If the minimized timer is running, sync our state
+      setLocalMode(globalMode);
+      setLocalTime(globalTime);
+    }
+  }, [isTimerMinimized, isTimerRunning, globalMode, globalTime]);
   
   const getTimeForMode = (modeId: string) => {
     switch (modeId) {
@@ -75,64 +109,18 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
   };
   
   const resetTimer = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    setIsRunning(false);
-    setTime(getTimeForMode(mode));
-  }, [mode, timerSettings]);
+    const newTime = getTimeForMode(localMode);
+    setLocalTime(newTime);
+    
+    // Also reset the global timer if minimized
+    if (isTimerMinimized) {
+      setTimerTime(newTime);
+    }
+  }, [localMode, timerSettings, isTimerMinimized, setTimerTime]);
 
   useEffect(() => {
     resetTimer();
-  }, [mode, timerSettings, resetTimer]);
-  
-  useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        setTime(prev => {
-          if (prev <= 1) {
-            // Timer completion
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            setIsRunning(false);
-            if (mode === MODES.POMODORO.id) {
-              setPomodoroCount(prev => prev + 1);
-              toast.success("Pomodoro complete! Time for a break.");
-              sendNotification(
-                "Pomodoro Complete! ✅", 
-                "Great job! You've completed your focus session. Time for a break."
-              );
-              // Auto-switch to break
-              const newMode = (pomodoroCount + 1) % 4 === 0 ? MODES.LONG_BREAK.id : MODES.SHORT_BREAK.id;
-              setMode(newMode);
-            } else {
-              toast.info("Break's over! Back to work.");
-              sendNotification(
-                "Break Time Over ⏰", 
-                "Your break has ended. Time to get back to work!"
-              );
-              setMode(MODES.POMODORO.id);
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isRunning, mode, pomodoroCount, timerSettings]);
-  
-  useEffect(() => {
-    loadTodayStats();
-    loadUserStats();
-  }, [userId]);
-
-  useEffect(() => {
-    // Request notification permission when component mounts
-    requestNotificationPermission();
-  }, []);
+  }, [localMode, timerSettings, resetTimer]);
 
   const loadUserStats = async () => {
     try {
@@ -211,215 +199,64 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Start the timer
   const handleStartPause = () => {
-    if (isRunning) {
-      pauseSession();
+    if (isTimerRunning) {
+      // Pause the timer
+      setTimerRunning(false);
     } else {
-      if (!selectedSubject && mode === MODES.POMODORO.id) {
-        toast.error("Please select a subject for your Pomodoro session.");
-        return;
-      }
-      startSession();
-    }
-  };
-  
-  const totalTime = getTimeForMode(mode);
-  const progress = totalTime > 0 ? ((totalTime - time) / totalTime) * 100 : 0;
-  
-  const startSession = async () => {
-    // If we're in a break mode, we can start without a subject
-    if (!selectedSubject && mode === MODES.POMODORO.id) {
-      // Check if any subjects are available
-      if (subjects && subjects.length > 0) {
-        toast.error("Please select a subject first");
-        return;
-      } else {
-        // If no subjects available, create a general study session
-        setSelectedSubject("general");
-      }
-    }
-    
-    // Always enable the timer to run
-    setIsRunning(true);
-    
-    try {
-      // Create a basic session with minimal fields
-      const { data, error } = await supabase
-        .from('study_sessions')
-        .insert({
-          user_id: userId,
-          start_time: new Date().toISOString(),
-          subject_id: selectedSubject || null,
-          title: "Study Session",
-          test_type: "study"
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error("Error creating session:", error);
-        toast.error("Could not save session to database");
-        return;
-      }
-
-      if (data) {
-        setCurrentSession(data);
-        toast.success("Study session started!");
-      }
-    } catch (error) {
-      console.error("Exception starting session:", error);
-      toast.error("Could not start session");
-    }
-  };
-
-  const pauseSession = () => {
-    setIsRunning(false);
-  };
-
-  const resumeSession = () => {
-    setIsRunning(true);
-  };
-
-  const endSession = async () => {
-    if (!currentSession) return;
-    
-    // Calculate session duration
-    const minutesCompleted = Math.max(1, Math.floor((totalTime - time) / 60));
-    const secondsCompleted = totalTime - time;
-    const formattedDuration = formatTime(secondsCompleted);
-    
-    // Ensure minimum duration (5 seconds) to count as a session
-    if (secondsCompleted < 5) {
-      setIsRunning(false);
-      setCurrentSession(null);
-      resetTimer();
-      toast.info("Session was too short to record");
-      return;
-    }
-    
-    // Update UI state early for better responsiveness
-    setIsRunning(false);
-    setPomodoroCount(prev => prev + (mode === MODES.POMODORO.id && secondsCompleted > 60 ? 1 : 0));
-    
-    // Calculate achievement points earned
-    const pointsEarned = Math.floor(minutesCompleted / 5) + (pomodoroCount * 2);
-    
-    try {
-      // Update the session with end_time, duration_minutes, is_completed, and points_earned
-      const { error } = await supabase
-        .from('study_sessions')
-        .update({
-          end_time: new Date().toISOString(),
-          duration_minutes: minutesCompleted,
-          is_completed: true,
-          points_earned: pointsEarned,
-          pomodoro_count: mode === MODES.POMODORO.id ? pomodoroCount : 0
-        })
-        .eq('id', currentSession.id);
-
-      if (error) {
-        console.error("Error updating session:", error);
-        toast.error("Could not save session details");
-      } else {
-        // Update user stats in database
-        try {
-          const updateData = {
-            total_study_time: userStats.total_study_time + minutesCompleted,
-            achievement_points: userStats.achievement_points + pointsEarned,
-            current_streak: userStats.current_streak + 1,
-            last_study_date: new Date().toISOString()
-          };
-
-          await supabase
-            .from('users')
-            .update(updateData)
-            .eq('id', userId);
-            
-          // Update local user stats
-          setUserStats(prev => ({
-            total_study_time: prev.total_study_time + minutesCompleted,
-            achievement_points: prev.achievement_points + pointsEarned,
-            current_streak: prev.current_streak + 1
-          }));
-        } catch (statsError) {
-          console.error("Error updating user stats:", statsError);
+      // Make sure we have a subject selected
+      if (!selectedSubject && localMode === MODES.POMODORO.id) {
+        if (subjects && subjects.length > 0) {
+          toast.error("Please select a subject first");
+          return;
+        } else {
+          setSelectedSubject("general");
         }
       }
+
+      // Set up the global timer state
+      const currentTheme = getModeTheme();
       
-      // Dispatch a custom event with the session data
-      const sessionEvent = new CustomEvent('study-session-completed', { 
-        detail: { 
-          totalStudyTime: userStats.total_study_time + minutesCompleted,
-          sessionMinutes: minutesCompleted,
-          pointsEarned: pointsEarned
-        } 
-      });
-      window.dispatchEvent(sessionEvent);
+      setTimerMode(localMode);
+      setTimerTime(localTime);
+      setTimerSubjectId(selectedSubject);
+      setTimerTheme(currentTheme);
       
-      // Dispatch a refresh event for the study session list
-      const refreshEvent = new CustomEvent('refresh-study-sessions');
-      window.dispatchEvent(refreshEvent);
+      // Start the timer
+      setTimerRunning(true);
       
-      setCurrentSession(null);
-      resetTimer();
+      // Show the global timer if it's not already visible
+      if (!isTimerMinimized) {
+        setTimerVisible(true);
+      }
       
-      // Refresh today's stats
-      loadTodayStats();
-      
-      toast.success(
-        <div className="space-y-1">
-          <div className="font-medium">Study session completed!</div>
-          <div className="text-sm flex items-center justify-between">
-            <span>Duration:</span>
-            <span className="font-medium">{formattedDuration}</span>
-          </div>
-          <div className="text-sm flex items-center justify-between">
-            <span>Points earned:</span>
-            <span className="font-medium text-yellow-300">+{pointsEarned}</span>
-          </div>
-          {mode === MODES.POMODORO.id && pomodoroCount > 0 && (
-            <div className="text-sm flex items-center justify-between">
-              <span>Pomodoros:</span>
-              <span className="font-medium">{pomodoroCount}</span>
-            </div>
-          )}
-        </div>,
-        { duration: 4000 }
-      );
-    } catch (error) {
-      console.error("Error ending session:", error);
-      
-      // Fall back to updating just local state
-      setCurrentSession(null);
-      resetTimer();
-      
-      toast.error("Could not save session details, but your time was counted!");
+      toast.success("Study timer started and will continue in background");
     }
   };
-
-  const getSessionTypeColor = (type: string) => {
-    switch (type) {
-      case 'study': return 'bg-blue-100 text-blue-800';
-      case 'review': return 'bg-green-100 text-green-800';
-      case 'practice': return 'bg-purple-100 text-purple-800';
-      case 'homework': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
+  
+  // Calculate progress for the timer display
+  const totalTime = getTimeForMode(localMode);
+  const progress = isTimerMinimized && isTimerRunning 
+    ? ((totalTime - globalTime) / totalTime) * 100 // Use global time if minimized
+    : ((totalTime - localTime) / totalTime) * 100; // Otherwise use local time
+  
   const handleModeChange = (newMode: string) => {
-    if (isRunning) {
+    if (isTimerRunning) {
       toast.warning("Please stop the current session before switching modes.");
       return;
     }
     if(newMode) {
-      setMode(newMode);
+      setLocalMode(newMode);
+      setTimerMode(newMode);
     }
   };
 
   const handleStop = () => {
-    if (isRunning) {
-      endSession();
+    if (isTimerRunning) {
+      // Stop the global timer
+      setTimerRunning(false);
+      setTimerVisible(false);
     }
     resetTimer();
   };
@@ -431,8 +268,21 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
     resetTimer();
   }
 
+  const handleMinimize = () => {
+    // Configure and show the global timer
+    const currentTheme = getModeTheme();
+    
+    setTimerMode(localMode);
+    setTimerTime(localTime);
+    setTimerSubjectId(selectedSubject);
+    setTimerTheme(currentTheme);
+    setTimerVisible(true);
+    
+    toast.info("Timer minimized and will continue in background");
+  };
+
   const getModeTheme = () => {
-    switch(mode) {
+    switch(localMode) {
       case MODES.POMODORO.id:
         return {
           bg: "bg-blue-50 dark:bg-blue-900/20",
@@ -499,6 +349,14 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
           <CardTitle>Study Timer</CardTitle>
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{todayTime} Today</Badge>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleMinimize}
+              title="Minimize timer"
+            >
+              <Minimize className="h-4 w-4" />
+            </Button>
             <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -511,7 +369,7 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col items-center justify-center space-y-6">
-        <ToggleGroup type="single" value={mode} onValueChange={handleModeChange} className="bg-white dark:bg-gray-800 p-1 rounded-full">
+        <ToggleGroup type="single" value={localMode} onValueChange={handleModeChange} className="bg-white dark:bg-gray-800 p-1 rounded-full">
           {Object.values(MODES).map(m => (
             <ToggleGroupItem key={m.id} value={m.id} className="px-4 py-1.5 text-sm rounded-full data-[state=on]:bg-gray-200 dark:data-[state=on]:bg-gray-700">
               {m.label}
@@ -545,11 +403,13 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-4xl font-bold tracking-tighter">{formatTime(time)}</span>
+            <span className="text-4xl font-bold tracking-tighter">
+              {isTimerMinimized && isTimerRunning ? formatTime(globalTime) : formatTime(localTime)}
+            </span>
             <span className={cn("text-sm font-medium uppercase tracking-widest", theme.text)}>
-              {mode === MODES.POMODORO.id ? MODES.POMODORO.label : 
-               mode === MODES.SHORT_BREAK.id ? MODES.SHORT_BREAK.label : 
-               mode === MODES.LONG_BREAK.id ? MODES.LONG_BREAK.label : 'Timer'}
+              {localMode === MODES.POMODORO.id ? MODES.POMODORO.label : 
+               localMode === MODES.SHORT_BREAK.id ? MODES.SHORT_BREAK.label : 
+               localMode === MODES.LONG_BREAK.id ? MODES.LONG_BREAK.label : 'Timer'}
             </span>
           </div>
         </div>
@@ -561,8 +421,12 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
         </div>
 
         <div className="w-full space-y-4">
-           {mode === MODES.POMODORO.id && (
-            <Select onValueChange={setSelectedSubject} defaultValue={selectedSubject} disabled={isRunning}>
+          {localMode === MODES.POMODORO.id && (
+            <Select 
+              onValueChange={setSelectedSubject} 
+              defaultValue={selectedSubject} 
+              disabled={isTimerRunning}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a subject..." />
               </SelectTrigger>
@@ -577,11 +441,20 @@ export function StudyTimer({ userId, subjects }: StudyTimerProps) {
           )}
 
           <div className="flex gap-4 w-full">
-            <Button onClick={handleStartPause} className={cn("w-full text-lg", theme.button)} size="lg">
-              {isRunning ? <Pause className="mr-2" /> : <Play className="mr-2" />}
-              {isRunning ? 'Pause' : 'Start'}
+            <Button 
+              onClick={handleStartPause} 
+              className={cn("w-full text-lg", theme.button)} 
+              size="lg"
+            >
+              {isTimerRunning ? <Pause className="mr-2" /> : <Play className="mr-2" />}
+              {isTimerRunning ? 'Pause' : 'Start'}
             </Button>
-            <Button onClick={handleStop} variant="outline" size="lg" className="text-lg">
+            <Button 
+              onClick={handleStop} 
+              variant="outline" 
+              size="lg" 
+              className="text-lg"
+            >
               <Square className="mr-2" />
               Stop
             </Button>

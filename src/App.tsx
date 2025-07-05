@@ -8,6 +8,8 @@ import { AlertCircle, DatabaseIcon, ExternalLink } from 'lucide-react'
 import { DirectLogin } from '@/components/dashboard/direct-login'
 import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { GlobalFloatingTimer } from '@/components/dashboard/global-floating-timer'
+import { ThemeProvider } from '@/components/providers/theme-provider'
 
 // Supabase Configuration Error Component
 const SupabaseConfigError = () => {
@@ -164,24 +166,29 @@ function App() {
   }
 
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={
-          <PublicRoute>
-            <LoginPage />
-          </PublicRoute>
-        } />
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/direct-login" element={<DirectLogin />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      <Toaster position="top-right" />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        {/* Global floating timer that persists across all routes */}
+        <GlobalFloatingTimer />
+        
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={
+            <PublicRoute>
+              <LoginPage />
+            </PublicRoute>
+          } />
+          <Route path="/dashboard" element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/direct-login" element={<DirectLogin />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <Toaster position="top-right" />
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 

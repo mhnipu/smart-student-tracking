@@ -49,6 +49,11 @@ interface Subject {
   category?: string;
 }
 
+interface Category {
+  value: string;
+  label: string;
+}
+
 interface EditSubjectDialogProps {
   userId: string;
   subjectId: string;
@@ -60,6 +65,15 @@ export function EditSubjectDialog({ userId, subjectId, onSubjectUpdated, childre
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [subject, setSubject] = useState<Subject | null>(null)
+  const [categories, setCategories] = useState<Category[]>([
+    { value: "STEM", label: "STEM" },
+    { value: "Language Arts", label: "Language Arts" },
+    { value: "Social Studies", label: "Social Studies" },
+    { value: "Creative Arts", label: "Creative Arts" },
+    { value: "Health & Fitness", label: "Health & Fitness" },
+    { value: "Business", label: "Business" },
+    { value: "Others", label: "Others" },
+  ])
 
   const form = useForm<z.infer<typeof subjectSchema>>({
     resolver: zodResolver(subjectSchema),
@@ -73,10 +87,53 @@ export function EditSubjectDialog({ userId, subjectId, onSubjectUpdated, childre
   })
 
   useEffect(() => {
-    if (isOpen && subjectId) {
-      loadSubjectData();
+    if (isOpen) {
+      if (subjectId) {
+        loadSubjectData();
+      }
+      loadAllCategories();
     }
   }, [isOpen, subjectId]);
+
+  const loadAllCategories = async () => {
+    try {
+      // Fetch all unique categories from the subjects table
+      const { data: categoriesData, error } = await supabase
+        .from("subjects")
+        .select("category")
+        .eq("user_id", userId)
+        .not("category", "is", null);
+      
+      if (error) {
+        console.error("Error loading categories:", error);
+        return;
+      }
+      
+      // Create a Set to store unique category values
+      const uniqueCategories = new Set<string>();
+      
+      // Add default categories
+      categories.forEach(cat => uniqueCategories.add(cat.value));
+      
+      // Add user-defined categories
+      if (categoriesData) {
+        categoriesData.forEach(item => {
+          if (item.category) uniqueCategories.add(item.category);
+        });
+      }
+      
+      // Convert the Set to an array of Category objects
+      const allCategories = Array.from(uniqueCategories).map(category => ({
+        value: category,
+        label: category
+      }));
+      
+      setCategories(allCategories);
+      console.log("Loaded categories:", allCategories);
+    } catch (err) {
+      console.error("Unexpected error loading categories:", err);
+    }
+  };
 
   const loadSubjectData = async () => {
     setLoading(true);
@@ -134,16 +191,6 @@ export function EditSubjectDialog({ userId, subjectId, onSubjectUpdated, childre
       setLoading(false);
     }
   }
-
-  const categories = [
-    { value: "STEM", label: "STEM" },
-    { value: "Language Arts", label: "Language Arts" },
-    { value: "Social Studies", label: "Social Studies" },
-    { value: "Creative Arts", label: "Creative Arts" },
-    { value: "Health & Fitness", label: "Health & Fitness" },
-    { value: "Business", label: "Business" },
-    { value: "Others", label: "Others" },
-  ]
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>

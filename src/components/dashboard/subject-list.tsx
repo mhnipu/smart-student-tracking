@@ -57,14 +57,74 @@ export function SubjectList({ userId, onSubjectAdded, existingSubjects }: Subjec
   const [newSubject, setNewSubject] = useState({
     name: "",
     code: "",
-    color: "#3b82f6"
+    color: "#3b82f6",
+    category: "",
+    description: ""
   });
   const [isAdding, setIsAdding] = useState(false);
+  const [useAutoCode, setUseAutoCode] = useState(true);
   
   useEffect(() => {
     // Always load subjects directly from the database for the most complete list
     loadSubjects();
   }, [userId]);
+  
+  // Generate code from subject name
+  useEffect(() => {
+    if (useAutoCode && newSubject.name) {
+      // Generate base code from name
+      const words = newSubject.name.trim().split(/\s+/);
+      
+      let baseCode = '';
+      
+      // Different code generation patterns based on word count
+      if (words.length === 1) {
+        // For single word, take first 3 letters
+        baseCode = words[0].substring(0, 3).toUpperCase();
+      } 
+      else if (words.length === 2) {
+        // For two words, take first 2 letters of each word
+        const firstWordChars = words[0].substring(0, 2).toUpperCase();
+        const secondWordChars = words[1].substring(0, 2).toUpperCase();
+        baseCode = firstWordChars + secondWordChars;
+      }
+      else if (words.length >= 3) {
+        // For 3+ words, take first letter of first three words
+        baseCode = words.slice(0, 3).map(word => word.charAt(0).toUpperCase()).join('');
+      }
+      
+      // Add a number suffix to make it look like a course code
+      const baseNumber = Math.floor(Math.random() * 400) + 100; // Random number between 100-499
+      let code = baseCode + baseNumber;
+      
+      // Check for duplicates and modify if needed
+      if (subjects && subjects.length > 0) {
+        let isDuplicate = true;
+        let attempt = 1;
+        let tempCode = code;
+        
+        // Try different number suffixes until we find a unique one
+        while (isDuplicate && attempt < 10) {
+          isDuplicate = subjects.some(subject => subject.code === tempCode);
+          
+          if (isDuplicate) {
+            // Try a different number pattern
+            const newNumber = baseNumber + (attempt * 5);
+            tempCode = baseCode + newNumber;
+            attempt++;
+          }
+        }
+        
+        // If we found a unique code, use it
+        if (!isDuplicate) {
+          code = tempCode;
+        }
+      }
+      
+      // Update the code in state
+      setNewSubject(prev => ({...prev, code}));
+    }
+  }, [newSubject.name, useAutoCode, subjects]);
   
   const loadSubjects = async () => {
     if (!userId) return;
@@ -164,17 +224,30 @@ export function SubjectList({ userId, onSubjectAdded, existingSubjects }: Subjec
     setIsAdding(true);
     
     try {
-      const { error } = await supabase
+      // Create a subject object with all fields explicitly
+      const subjectToAdd = {
+        name: newSubject.name,
+        code: newSubject.code,
+        color: newSubject.color,
+        category: newSubject.category,
+        description: newSubject.description,
+        user_id: userId
+      };
+
+      console.log("Adding subject with data:", subjectToAdd);
+      
+      const { data, error } = await supabase
         .from("subjects")
-        .insert([{ ...newSubject, user_id: userId }])
+        .insert([subjectToAdd])
         .select();
 
       if (error) {
         toast.error("Failed to add subject. Please try again.");
-        console.error(error);
+        console.error("Error adding subject:", error);
         return;
       }
       
+      console.log("Subject added successfully:", data);
       toast.success("Subject added successfully!");
       
       if (existingSubjects) {
@@ -193,11 +266,13 @@ export function SubjectList({ userId, onSubjectAdded, existingSubjects }: Subjec
       setNewSubject({
         name: "",
         code: "",
-        color: "#3b82f6"
+        color: "#3b82f6",
+        category: "",
+        description: ""
       });
     } catch (error) {
       toast.error("An unexpected error occurred");
-      console.error(error);
+      console.error("Unexpected error adding subject:", error);
     } finally {
       setIsAdding(false);
     }
@@ -334,12 +409,47 @@ export function SubjectList({ userId, onSubjectAdded, existingSubjects }: Subjec
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="code">Subject Code</Label>
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="code">Subject Code</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Auto-generate</span>
+                    <div 
+                      className={`relative w-8 h-4 rounded-full cursor-pointer transition-colors ${useAutoCode ? 'bg-blue-500' : 'bg-gray-300'}`}
+                      onClick={() => setUseAutoCode(!useAutoCode)}
+                    >
+                      <div 
+                        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${useAutoCode ? 'left-[18px]' : 'left-0.5'}`}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
                 <Input 
                   id="code" 
                   placeholder="e.g., CS101" 
                   value={newSubject.code}
                   onChange={(e) => setNewSubject({...newSubject, code: e.target.value})}
+                  disabled={useAutoCode}
+                />
+                {useAutoCode && (
+                  <p className="text-xs text-gray-500">Code is auto-generated from subject name</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Input 
+                  id="category" 
+                  placeholder="e.g., Science, Math, Language" 
+                  value={newSubject.category}
+                  onChange={(e) => setNewSubject({...newSubject, category: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Input 
+                  id="description" 
+                  placeholder="Brief description of the subject" 
+                  value={newSubject.description}
+                  onChange={(e) => setNewSubject({...newSubject, description: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
